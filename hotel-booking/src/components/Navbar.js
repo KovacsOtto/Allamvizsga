@@ -6,7 +6,7 @@ const Navbar = () => {
 
   return (
     <nav className="flex justify-between p-4 bg-green-700 text-white">
-      <h1 className="text-2xl font-bold cursor-pointer" onClick={() => navigate("/")}>Hotel Booking</h1>
+      <h1 className="text-2xl font-bold cursor-pointer" onClick={() => navigate("/")}>ReserVRoom</h1>
 
       <div>
         {isLoggedIn() ? (

@@ -1,9 +1,26 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import axios from "axios";
 import { isLoggedIn, logout } from "../utils/auth";
+import { DateRange } from "react-date-range";
+import "react-date-range/dist/styles.css";
+import "react-date-range/dist/theme/default.css";
+import { format } from "date-fns";
+import { enGB } from "date-fns/locale";
 
 const Dashboard = () => {
   const navigate = useNavigate();
+  const [query, setQuery] = useState("");
+  const [destId, setDestId] = useState(null);
+  const [suggestions, setSuggestions] = useState([]);
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const [guestOpen, setGuestOpen] = useState(false);
+  const [hotels, setHotels] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [dates, setDates] = useState([
+    { startDate: new Date(), endDate: new Date(), key: "selection" },
+  ]);
+  const [guests, setGuests] = useState({ adults: 1, children: 0, rooms: 1 });
 
   useEffect(() => {
     if (!isLoggedIn()) {
@@ -11,22 +28,196 @@ const Dashboard = () => {
     }
   }, [navigate]);
 
-  return (
-    <div className="flex items-center justify-center h-screen bg-gray-100">
-      <div className="bg-white p-8 rounded-xl shadow-xl w-96 text-center">
-        <h1 className="text-3xl font-bold text-green-800 mb-6">Welcome to Your Dashboard</h1>
-        <p className="text-gray-600 mb-4">You are logged in!</p>
+  const handleSearch = async (value) => {
+    setQuery(value);
+    if (!value.trim()) {
+      setSuggestions([]);
+      return;
+    }
+    try {
+      const res = await axios.get(`http://localhost:5000/api/search?query=${value}`);
+      setSuggestions(res.data);
+    } catch (err) {
+      console.error("Failed to fetch destinations");
+    }
+  };
 
-        <button
-          className="px-6 py-3 bg-red-600 text-white rounded-lg shadow-md hover:bg-red-700 hover:shadow-lg transition"
-          onClick={() => {
-            logout();
-            navigate("/auth");
-          }}
+  const updateGuestCount = (type, operation) => {
+    setGuests((prev) => ({
+      ...prev,
+      [type]: operation === "increase"
+        ? prev[type] + 1
+        : Math.max(type === "rooms" ? 1 : 0, prev[type] - 1),  
+    }));
+  };
+  const convertToUSD = (aedPrice) => {
+    const conversionRate = 0.27; 
+    return (aedPrice * conversionRate).toFixed(2);
+  };
+
+  const handleHotelSearch = async () => {
+    if (!destId) {
+      alert("Please select a destination first.");
+      return;
+    }
+  
+    setLoading(true);
+    try {
+      const check_in = format(new Date(dates[0].startDate), "yyyy-MM-dd");
+      const check_out = format(new Date(dates[0].endDate), "yyyy-MM-dd");
+  
+      console.log(" Sending Request:", { dest_id: destId, check_in, check_out });
+  
+      const res = await axios.get("http://localhost:5000/api/hotels", {
+        params: {
+          dest_id: destId,
+          check_in,  
+          check_out, 
+          adults: guests.adults,
+          children: guests.children > 0 ? Array(guests.children).fill(5).join(",") : "",
+          room_qty: guests.rooms,
+        },
+      });
+  
+      console.log("Hotels API Response:", res.data);
+      setHotels(res.data.data.hotels || []);
+    } catch (err) {
+      console.error(" Failed to fetch hotels:", err);
+    }
+    setLoading(false);
+  };
+  
+  
+  
+
+  return (
+    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100 p-6">
+        <div className="bg-white p-4 rounded-xl shadow-xl w-full max-w-3xl flex items-center gap-4 border-2 border-yellow-500">
+      <div className="relative flex-1 w-full">
+      <input
+        type="text"
+        placeholder="Enter destination..."
+        value={query}
+        onChange={(e) => handleSearch(e.target.value)}
+        className="w-full px-6 py-3 text-lg border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500"
+      />
+      {suggestions.length > 0 && (
+        <ul className="absolute left-0 right-0 bg-white shadow-md rounded-lg mt-1 max-h-40 overflow-y-auto z-50">
+          {suggestions.map((suggestion) => (
+            <li
+              key={suggestion.id}
+              onClick={() => {
+                setQuery(suggestion.name);
+                setDestId(suggestion.id);
+                setSuggestions([]);
+              }}
+              className="px-4 py-2 hover:bg-gray-200 cursor-pointer text-lg"
+            >
+              {suggestion.name}, {suggestion.country}
+            </li>
+          ))}
+        </ul>
+      )}
+      </div>
+        <div
+          className="relative flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg cursor-pointer text-sm"
+          onClick={() => setCalendarOpen(!calendarOpen)}
         >
-          Logout
+          <span role="img" aria-label="calendar">📅</span>
+          {`${format(dates[0].startDate, "MM/dd/yyyy")} — ${format(dates[0].endDate, "MM/dd/yyyy")}`}
+        </div>
+
+        {calendarOpen && (
+          <div className="absolute top-16 right-0 z-50">
+            <DateRange
+              locale={enGB}
+              editableDateInputs={true}
+              onChange={(item) => setDates([item.selection])}
+              moveRangeOnFirstSelection={false}
+              ranges={dates}
+              className="shadow-lg border border-gray-300 rounded-lg"
+            />
+          </div>
+        )}
+
+        <div
+          className="relative flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg cursor-pointer text-sm"
+          onClick={() => setGuestOpen(!guestOpen)}
+        >
+          <span role="img" aria-label="guests">👤</span>
+          {`${guests.adults} adults · ${guests.children} children · ${guests.rooms} room`}
+        </div>
+
+        {guestOpen && (
+          <div className="absolute top-16 right-0 bg-white p-4 shadow-lg rounded-lg border border-gray-300 z-50 w-64">
+            <div className="flex justify-between items-center mb-2">
+              <span>Adults</span>
+              <div className="flex items-center gap-2">
+                <button className="px-2 py-1 border border-gray-300 rounded" onClick={() => updateGuestCount("adults", "decrease")}>-</button>
+                <span>{guests.adults}</span>
+                <button className="px-2 py-1 border border-gray-300 rounded" onClick={() => updateGuestCount("adults", "increase")}>+</button>
+              </div>
+            </div>
+
+            <div className="flex justify-between items-center mb-2">
+              <span>Children</span>
+              <div className="flex items-center gap-2">
+                <button className="px-2 py-1 border border-gray-300 rounded" onClick={() => updateGuestCount("children", "decrease")}>-</button>
+                <span>{guests.children}</span>
+                <button className="px-2 py-1 border border-gray-300 rounded" onClick={() => updateGuestCount("children", "increase")}>+</button>
+              </div>
+            </div>
+            <div className="flex justify-between items-center mb-2">
+            <span>Rooms</span>
+            <div className="flex items-center gap-2">
+              <button className="px-2 py-1 border border-gray-300 rounded" onClick={() => updateGuestCount("rooms", "decrease")}>-</button>
+              <span>{guests.rooms}</span>
+              <button className="px-2 py-1 border border-gray-300 rounded" onClick={() => updateGuestCount("rooms", "increase")}>+</button>
+            </div>
+            </div>
+            <button className="w-full px-4 py-2 bg-blue-500 text-white rounded-lg mt-2" onClick={() => setGuestOpen(false)}>Done</button>
+          </div>
+        )}
+        <button className="px-6 py-2 bg-green-700 text-white rounded-lg" onClick={handleHotelSearch}>
+          Search
         </button>
       </div>
+
+    
+        <div className="mt-6 w-full max-w-4xl">
+      {loading ? (
+        <p className="text-blue-600 text-lg">Loading hotels...</p>
+      ) : hotels.length > 0 ? (
+        hotels.map((hotel) => (
+          <div key={hotel.property.id} className="bg-white shadow-lg rounded-lg p-4 mb-4 flex items-center gap-4">
+            <img
+              src={hotel.property.photoUrls?.[0] || "https://via.placeholder.com/150"}
+              alt={hotel.property.name}
+              className="w-24 h-24 rounded-lg object-cover"
+            />
+            
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900">{hotel.property.name}</h3>
+              <p className="text-sm text-gray-600">{hotel.property.wishlistName || "Location Unavailable"}</p>
+              <p className="text-sm text-gray-500">⭐ {hotel.property.reviewScore} ({hotel.property.reviewCount} reviews)</p>
+              
+              {hotel.property.priceBreakdown?.grossPrice?.value ? (
+                <p className="text-sm text-green-600 font-bold">
+                  {convertToUSD(hotel.property.priceBreakdown.grossPrice.value)} USD
+                </p>
+              ) : (
+                <p className="text-sm text-gray-500">Price not available</p>
+              )}
+            </div>
+          </div>
+        ))
+      ) : (
+        <p className="text-gray-500 text-lg">No hotels found.</p>
+      )}
+    </div>
+
+
+
     </div>
   );
 };
