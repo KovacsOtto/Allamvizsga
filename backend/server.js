@@ -134,7 +134,60 @@ app.get("/api/hotels", async (req, res) => {
 });
 
 
+app.get("/api/hotels/details/:id", async (req, res) => {
+  const { id } = req.params;
+  const { check_in, check_out, adults, children, room_qty } = req.query;
 
+  try {
+    const response = await axios.get("https://booking-com15.p.rapidapi.com/api/v1/hotels/getHotelDetails", {
+      params: {
+        hotel_id: id,
+        arrival_date: check_in,
+        departure_date: check_out,
+        adults,
+        children_age: children ? children.split(",").join("%2C") : "",
+        room_qty,
+        units: "metric",
+        temperature_unit: "c",
+        languagecode: "en-us",
+        currency_code: "EUR",
+      },
+      headers: {
+        "x-rapidapi-key": process.env.RAPIDAPI_KEY,
+        "x-rapidapi-host": "booking-com15.p.rapidapi.com",
+      },
+    });
+
+    res.json(response.data);
+  } catch (error) {
+    console.error("API Error:", error.response ? error.response.data : error.message);
+    res.status(500).json({ error: "Failed to fetch hotel details" });
+  }
+});
+
+
+app.get("/api/hotels/photos/:hotel_id", async (req, res) => {
+  const { hotel_id } = req.params;
+  
+  try {
+    const response = await axios.get("https://booking-com15.p.rapidapi.com/api/v1/hotels/getHotelPhotos", {
+      params: { hotel_id },
+      headers: {
+        "x-rapidapi-key": process.env.RAPIDAPI_KEY,
+        "x-rapidapi-host": "booking-com15.p.rapidapi.com",
+      },
+    });
+
+    if (response.data.status && response.data.data.length > 0) {
+      res.json({ status: true, data: response.data.data });
+    } else {
+      res.json({ status: false, message: "No images found" });
+    }
+  } catch (error) {
+    console.error("Error fetching hotel photos:", error);
+    res.status(500).json({ status: false, message: "Failed to fetch photos" });
+  }
+});
 
 
 app.listen(5000, () => {

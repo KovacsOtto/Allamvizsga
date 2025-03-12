@@ -8,7 +8,7 @@ import "react-date-range/dist/theme/default.css";
 import { format } from "date-fns";
 import { enGB } from "date-fns/locale";
 
-const Dashboard = () => {
+const Dashboard = ({ currency }) => {
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
   const [destId, setDestId] = useState(null);
@@ -50,11 +50,16 @@ const Dashboard = () => {
         : Math.max(type === "rooms" ? 1 : 0, prev[type] - 1),  
     }));
   };
-  const convertToUSD = (aedPrice) => {
-    const conversionRate = 0.27; 
-    return (aedPrice * conversionRate).toFixed(2);
+  const conversionRates = {
+    USD: 1,      
+    HUF: 350,    
+    LEI: 4.5,    
   };
 
+  const convertPrice = (aedPrice) => {
+    const usdPrice = aedPrice * 0.27; 
+    return (usdPrice * conversionRates[currency]).toFixed(2); 
+  };
   const handleHotelSearch = async () => {
     if (!destId) {
       alert("Please select a destination first.");
@@ -94,6 +99,7 @@ const Dashboard = () => {
     <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100 p-6">
         <div className="bg-white p-4 rounded-xl shadow-xl w-full max-w-3xl flex items-center gap-4 border-2 border-yellow-500">
       <div className="relative flex-1 w-full">
+        
       <input
         type="text"
         placeholder="Enter destination..."
@@ -189,7 +195,18 @@ const Dashboard = () => {
         <p className="text-blue-600 text-lg">Loading hotels...</p>
       ) : hotels.length > 0 ? (
         hotels.map((hotel) => (
-          <div key={hotel.property.id} className="bg-white shadow-lg rounded-lg p-4 mb-4 flex items-center gap-4">
+          <div key={hotel.property.id} className="bg-white shadow-lg rounded-lg p-4 mb-4 flex items-center gap-4"
+          onClick={() => {
+            const params = new URLSearchParams({
+              check_in: format(dates[0].startDate, "yyyy-MM-dd"),
+              check_out: format(dates[0].endDate, "yyyy-MM-dd"),
+              adults: guests.adults,
+              children: guests.children > 0 ? Array(guests.children).fill(5).join(",") : "",
+              room_qty: guests.rooms,
+            }).toString();
+    
+            navigate(`/hotel/${hotel.property.id}?${params}`);
+          }}>
             <img
               src={hotel.property.photoUrls?.[0] || "https://via.placeholder.com/150"}
               alt={hotel.property.name}
@@ -201,13 +218,9 @@ const Dashboard = () => {
               <p className="text-sm text-gray-600">{hotel.property.wishlistName || "Location Unavailable"}</p>
               <p className="text-sm text-gray-500">⭐ {hotel.property.reviewScore} ({hotel.property.reviewCount} reviews)</p>
               
-              {hotel.property.priceBreakdown?.grossPrice?.value ? (
-                <p className="text-sm text-green-600 font-bold">
-                  {convertToUSD(hotel.property.priceBreakdown.grossPrice.value)} USD
-                </p>
-              ) : (
-                <p className="text-sm text-gray-500">Price not available</p>
-              )}
+              <p className="text-sm font-bold text-green-600">
+                {convertPrice(hotel.property.priceBreakdown.grossPrice.value)} {currency}
+              </p>
             </div>
           </div>
         ))
