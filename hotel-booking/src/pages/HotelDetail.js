@@ -1,13 +1,27 @@
 import { useParams, useLocation } from "react-router-dom";
 import { useEffect, useState } from "react";
 import axios from "axios";
+import Navbar from "../components/Navbar";
+
+
+const exchangeRates = {
+  EUR: 1,
+  LEI: 4.5,
+  HUF: 398.58
+};
 
 const HotelDetail = () => {
   const { id } = useParams();
   const location = useLocation();
   const [hotel, setHotel] = useState(null);
   const [photos, setPhotos] = useState([]);
+  const [description, setHotelDescription] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [showGallery, setShowGallery] = useState(false);
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const [currency, setCurrency] = useState(localStorage.getItem("currency") || "USD");
+  const [attractions, setAttractions] = useState([]);
+  const [loadingAttractions, setLoadingAttractions] = useState(false);
 
   const searchParams = new URLSearchParams(location.search);
   const check_in = searchParams.get("check_in");
@@ -17,6 +31,11 @@ const HotelDetail = () => {
   const room_qty = searchParams.get("room_qty");
 
   useEffect(() => {
+    localStorage.setItem("currency", currency);
+  }, [currency]);
+
+  useEffect(() => {
+
     const fetchHotelDetails = async () => {
       try {
         const res = await axios.get(`http://localhost:5000/api/hotels/details/${id}`, {
@@ -46,69 +65,205 @@ const HotelDetail = () => {
       }
       setLoading(false);
     };
+    const fetchHotelDescription = async () => {
+      try {
+        const response = await axios.get(`http://localhost:5000/api/hotels/description/${id}`);
+        console.log("Description Response:", response.data);
+        if (response.data.success) {
+          setHotelDescription(response.data.description);
+        } else {
+          console.error("Invalid description response:", response.data);
+        }
+      } catch (error) {
+        console.error("Failed to fetch hotel description:", error);
+      }
+    };
 
     fetchHotelDetails();
     fetchHotelPhotos();
-  }, [id, check_in, check_out, adults, children, room_qty]);
+    fetchHotelDescription();
 
-  if (loading) return <p className="text-center text-lg">Loading...</p>;
-  if (!hotel) return <p className="text-center text-lg">Hotel not found</p>;
+    const fetchAttractions = async () => {
+      if (!hotel || !hotel.city) return;
+  
+      setLoadingAttractions(true);
+      try {
+        const searchRes = await axios.get('http://localhost:5000/api/attractions/search', {
+          params: { query: hotel.city },
+        });
+  
+        const slugs = (searchRes.data.data || []).slice(0, 5).map(item => item.productSlug);
+  
+        const details = await Promise.all(slugs.map(slug =>
+          axios.get('http://localhost:5000/api/attractions/details', { params: { slug } })
+        ));
+  
+        const attractionsData = details.map(d => d.data.data);
+        setAttractions(attractionsData);
+      } catch (err) {
+        console.error("Failed to fetch attractions:", err);
+      }
+      setLoadingAttractions(false);
+    };
+  
+    fetchAttractions();
+  }, [id, check_in, check_out, adults, children, room_qty,hotel]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-gray-100">
+        <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-yellow-500 border-solid"></div>
+      </div>
+    );
+  }
+  
+  if (!hotel) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-gray-100">
+        <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-yellow-500 border-solid"></div>
+      </div>
+    );
+  }
+  
+  const convertPrice = (amount) => {
+    return (amount * exchangeRates[currency]).toFixed(2);
+  };
 
   return (
-    <div className="max-w-5xl mx-auto p-6">
-      <h1 className="text-3xl font-bold mb-4">{hotel.hotel_name || "No Name Available"}</h1>
+    <>
+      <Navbar setCurrency={setCurrency} />
+      <div className="max-w-5xl mx-auto p-6">
+        <h1 className="text-3xl font-bold mb-4">{hotel.hotel_name || "No Name Available"}</h1>
+        <p className="text-gray-700">{hotel.address || "No address available"}</p>
+        <div className="photos-container" >
+          {photos.length > 0 ? (
+            <div className="grid grid-cols-4 gap-2">
+              <div className="col-span-2 row-span-2 cursor-pointer" onClick={() => { setShowGallery(true); setSelectedIndex(0); }}>
+                <img src={photos[0].url} alt="Main Hotel" className="w-full h-full object-cover rounded-lg" />
+              </div>
 
-      {photos.length > 0 ? (
-        <div className="grid grid-cols-4 gap-2">
-          <div className="col-span-2 row-span-2">
-            <img
-              src={photos[0].url}
-              alt="Main Hotel"
-              className="w-full h-full object-cover rounded-lg"
-            />
-          </div>
+              {photos.slice(1, 5).map((photo, index) => (
+                <div key={index} className="cursor-pointer relative" onClick={() => { setShowGallery(true); setSelectedIndex(index + 1); }}>
+                  <img src={photo.url} alt={`Hotel ${index}`} className="w-full h-full object-cover rounded-lg" />
+                </div>
+              ))}
 
-          {photos.slice(1, 5).map((photo, index) => (
-            <div key={index} className="relative">
-              <img src={photo.url} alt={`Hotel ${index}`} className="w-full h-full object-cover rounded-lg" />
+              {photos.length > 5 && (
+                <div className="relative cursor-pointer" onClick={() => setShowGallery(true)}>
+                  <img src={photos[5].url} alt="More Photos" className="w-full h-full object-cover rounded-lg" />
+                  <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center rounded-lg">
+                    <p className="text-white text-lg font-bold">+{photos.length - 5} photos</p>
+                  </div>
+                </div>
+              )}
             </div>
-          ))}
+          ) : (
+            <p>No Images Available</p>
+          )}
+        </div>
+        <div className="info-box flex justify-between ">
+        <div className="w-2/3">
+            <div className="mb-4   rounded-lg">
+              <h2 className="text-2xl font-semibold mb-2">About this hotel</h2>
+              <p className="text-gray-700 p-1">{description || "No description available."}</p>
+            </div>
+            {hotel.property_highlight_strip && (
+              <ul className="mt-4 p-4">
+                {hotel.property_highlight_strip.map((highlight, index) => (
+                  <li key={index} className="text-sm text-gray-600">✔ {highlight.name}</li>
+                ))}
+              </ul>
+            )}
+            
+          </div>
+          
+          <div className="flex flex-col-reverse items-end justify-end w-1/3 ">
+            <p className="text-lg mt-4">⭐ {hotel.review_nr || "No rating"} reviews</p>
+            <p className="text-lg text-green-600 font-bold">
+              {hotel.product_price_breakdown?.gross_amount?.value
+                ? convertPrice(hotel.product_price_breakdown.gross_amount.value)
+                : "No Price"} {currency}
 
-          {photos.length > 5 && (
-            <div className="relative">
-              <img
-                src={photos[5].url}
-                alt="More Photos"
-                className="w-full h-full object-cover rounded-lg"
-              />
-              <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center rounded-lg">
-                <p className="text-white text-lg font-bold">+{photos.length - 5} photos</p>
+            </p>
+          </div>
+          
+
+
+        </div>
+        {loadingAttractions ? (
+        <p className="text-center mt-6 text-gray-500">Loading attractions...</p>
+          ) : attractions.length > 0 && (
+            <div className="mt-12">
+              <h2 className="text-2xl font-bold mb-4">Things to do nearby</h2>
+              <div className="flex overflow-x-auto space-x-4">
+                {attractions.map((item, idx) => (
+                  <div key={idx} className="min-w-[250px] bg-white rounded-lg shadow-md p-4">
+                    <img
+                      src={item.coverImageUrl || "https://via.placeholder.com/300"}
+                      alt={item.title}
+                      className="rounded-lg mb-2 object-cover h-40 w-full"
+                    />
+                    <h3 className="font-semibold">{item.title}</h3>
+                    <p className="text-sm text-gray-600">{item.duration || 'Duration: N/A'}</p>
+                    <p className="text-green-600 font-bold mt-1">{item.price?.value ? `$${item.price.value}` : 'Price N/A'}</p>
+                  </div>
+                ))}
               </div>
             </div>
           )}
-        </div>
-      ) : (
-        <p>No Images Available</p>
-      )}
 
-      <p className="text-lg mt-4">⭐ {hotel.review_nr || "No rating"} reviews</p>
-      <p className="text-lg text-green-600 font-bold">
-        {hotel.product_price_breakdown?.gross_amount?.value || "No Price"} {hotel.currency_code}
-      </p>
-      <p className="text-gray-700">{hotel.address || "No address available"}</p>
+        <a href={hotel.url} target="_blank" rel="noopener noreferrer" className="mt-4 block text-blue-500 underline">
+          View on Booking.com
+        </a>
+        {showGallery && (
+          <div className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50">
+            <div className="relative w-full max-w-4xl">
+              <button
+                className="absolute top-2 right-2 text-white text-3xl font-bold"
+                onClick={() => setShowGallery(false)}
+              >
+                ✖
+              </button>
 
-      {hotel.property_highlight_strip && (
-        <ul className="mt-4">
-          {hotel.property_highlight_strip.map((highlight, index) => (
-            <li key={index} className="text-sm text-gray-600">✔ {highlight.name}</li>
-          ))}
-        </ul>
-      )}
+              {selectedIndex > 0 && (
+                <button
+                  className="absolute left-2 top-1/2 transform -translate-y-1/2 text-white text-3xl"
+                  onClick={() => setSelectedIndex(selectedIndex - 1)}
+                >
+                  ◀
+                </button>
+              )}
+              {selectedIndex < photos.length - 1 && (
+                <button
+                  className="absolute right-2 top-1/2 transform -translate-y-1/2 text-white text-3xl"
+                  onClick={() => setSelectedIndex(selectedIndex + 1)}
+                >
+                  ▶
+                </button>
+              )}
 
-      <a href={hotel.url} target="_blank" rel="noopener noreferrer" className="mt-4 block text-blue-500 underline">
-        View on Booking.com
-      </a>
-    </div>
+              <img
+                src={photos[selectedIndex].url}
+                alt={`Photo ${selectedIndex}`}
+                className="w-full h-auto max-h-[80vh] mx-auto rounded-lg"
+              />
+
+              <div className="flex overflow-x-auto mt-4 space-x-2 p-2 bg-black bg-opacity-50 rounded-lg">
+                {photos.map((photo, index) => (
+                  <img
+                    key={index}
+                    src={photo.url}
+                    alt={`Thumbnail ${index}`}
+                    className={`w-20 h-20 object-cover rounded cursor-pointer ${index === selectedIndex ? "border-4 border-white" : ""}`}
+                    onClick={() => setSelectedIndex(index)}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </>
   );
 };
 

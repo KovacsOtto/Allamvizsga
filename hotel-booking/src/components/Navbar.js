@@ -21,7 +21,7 @@ const Navbar = ({ setCurrency, currency }) => {
         onChange={handleCurrencyChange}
         className="border border-gray-300 rounded-md px-2 py-1 text-xs focus:ring-2 focus:ring-green-500 bg-white text-black w-15 appearance-none"
       >
-        <option value="USD">USD ($)</option>
+        <option value="EUR">EUR (€)</option>
         <option value="HUF">HUF (Ft)</option>
         <option value="LEI">LEI (RON)</option>
       </select>

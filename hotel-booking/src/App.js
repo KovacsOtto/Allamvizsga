@@ -20,7 +20,7 @@ const Layout = ({ children, currency, setCurrency }) => {
 };
 
 function App() {
-  const [currency, setCurrency] = useState("USD");
+  const [currency, setCurrency] = useState(localStorage.getItem("currency") || "EUR");
 
   return (
     <Router>

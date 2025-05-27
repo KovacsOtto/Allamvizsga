@@ -8,7 +8,7 @@ import "react-date-range/dist/theme/default.css";
 import { format } from "date-fns";
 import { enGB } from "date-fns/locale";
 
-const Dashboard = ({ currency }) => {
+const Dashboard = ({ currency, setCurrency }) => {
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
   const [destId, setDestId] = useState(null);
@@ -21,13 +21,39 @@ const Dashboard = ({ currency }) => {
     { startDate: new Date(), endDate: new Date(), key: "selection" },
   ]);
   const [guests, setGuests] = useState({ adults: 1, children: 0, rooms: 1 });
+  const [page, setPage] = useState(1);
 
   useEffect(() => {
     if (!isLoggedIn()) {
       navigate("/auth");
     }
   }, [navigate]);
+  useEffect(() => {
+    if (destId) {
+      handleHotelSearch();
+    }
+  }, [page]);
+  
+  useEffect(() => {
+  const savedSearch = localStorage.getItem("dashboardSearch");
+  if (savedSearch) {
+    const { query, destId, dates, guests } = JSON.parse(savedSearch);
 
+    setQuery(query);
+    setDestId(destId);
+
+    const fixedDates = dates.map(d => ({
+      ...d,
+      startDate: new Date(d.startDate),
+      endDate: new Date(d.endDate),
+    }));
+
+    setDates(fixedDates);
+    setGuests(guests);
+  }
+  }, []);
+
+  
   const handleSearch = async (value) => {
     setQuery(value);
     if (!value.trim()) {
@@ -51,20 +77,29 @@ const Dashboard = ({ currency }) => {
     }));
   };
   const conversionRates = {
-    USD: 1,      
-    HUF: 350,    
-    LEI: 4.5,    
+    USD: 1,
+    EUR: 0.93,  
+    HUF: 350,
+    LEI: 4.5,
   };
+  
 
   const convertPrice = (aedPrice) => {
     const usdPrice = aedPrice * 0.27; 
-    return (usdPrice * conversionRates[currency]).toFixed(2); 
+    const rate = conversionRates[currency] || 1;
+    return (usdPrice * rate).toFixed(2);
   };
   const handleHotelSearch = async () => {
     if (!destId) {
       alert("Please select a destination first.");
       return;
     }
+    localStorage.setItem("dashboardSearch", JSON.stringify({
+      query,
+      destId,
+      dates,
+      guests,
+    }));
   
     setLoading(true);
     try {
@@ -81,6 +116,7 @@ const Dashboard = ({ currency }) => {
           adults: guests.adults,
           children: guests.children > 0 ? Array(guests.children).fill(5).join(",") : "",
           room_qty: guests.rooms,
+          page_number: page,
         },
       });
   
@@ -96,7 +132,7 @@ const Dashboard = ({ currency }) => {
   
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100 p-6">
+    <div className="flex flex-col items-center justify-top min-h-screen bg-gray-100 p-6">
         <div className="bg-white p-4 rounded-xl shadow-xl w-full max-w-3xl flex items-center gap-4 border-2 border-yellow-500">
       <div className="relative flex-1 w-full">
         
@@ -134,7 +170,7 @@ const Dashboard = ({ currency }) => {
         </div>
 
         {calendarOpen && (
-          <div className="absolute top-16 right-0 z-50">
+          <div className="absolute top-14 left-[37%] mt-32 bg-white shadow-lg rounded-lg border border-gray-300 overflow-hidden">
             <DateRange
               locale={enGB}
               editableDateInputs={true}
@@ -155,7 +191,7 @@ const Dashboard = ({ currency }) => {
         </div>
 
         {guestOpen && (
-          <div className="absolute top-16 right-0 bg-white p-4 shadow-lg rounded-lg border border-gray-300 z-50 w-64">
+          <div className="absolute top-14 left-[55%] mt-32  bg-white p-4 shadow-lg rounded-lg border border-gray-300 z-50 w-64">
             <div className="flex justify-between items-center mb-2">
               <span>Adults</span>
               <div className="flex items-center gap-2">
@@ -190,12 +226,12 @@ const Dashboard = ({ currency }) => {
       </div>
 
     
-        <div className="mt-6 w-full max-w-4xl">
+        <div className="mt-6 w-full max-w-4xl ">
       {loading ? (
-        <p className="text-blue-600 text-lg">Loading hotels...</p>
+        <p className="text-blue-600 text-lg text-center">Loading hotels...</p>
       ) : hotels.length > 0 ? (
         hotels.map((hotel) => (
-          <div key={hotel.property.id} className="bg-white shadow-lg rounded-lg p-4 mb-4 flex items-center gap-4"
+          <div key={hotel.property.id} className="bg-white shadow-lg rounded-lg p-2 mb-4 flex items-center gap-4"
           onClick={() => {
             const params = new URLSearchParams({
               check_in: format(dates[0].startDate, "yyyy-MM-dd"),
@@ -213,26 +249,61 @@ const Dashboard = ({ currency }) => {
               className="w-24 h-24 rounded-lg object-cover"
             />
             
-            <div>
-              <h3 className="text-lg font-semibold text-gray-900">{hotel.property.name}</h3>
-              <p className="text-sm text-gray-600">{hotel.property.wishlistName || "Location Unavailable"}</p>
-              <p className="text-sm text-gray-500">⭐ {hotel.property.reviewScore} ({hotel.property.reviewCount} reviews)</p>
-              
-              <p className="text-sm font-bold text-green-600">
-                {convertPrice(hotel.property.priceBreakdown.grossPrice.value)} {currency}
-              </p>
-            </div>
+            <div className="flex flex-1 justify-between items-center">
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900">{hotel.property.name}</h3>
+            <p className="text-sm text-gray-600">{hotel.property.wishlistName || "Location Unavailable"}</p>
+            {hotel.accessibilityLabel && (
+              <p className="text-xs text-gray-400 mt-1">{hotel.accessibilityLabel}</p>
+            )}
           </div>
-        ))
-      ) : (
-        <p className="text-gray-500 text-lg">No hotels found.</p>
-      )}
+
+              
+              
+          <div className="flex flex-col items-end justify-between h-full">
+            <p className="text-green-600 font-bold text-lg">
+              {convertPrice(hotel.property.priceBreakdown.grossPrice.value)} {currency}
+            </p>
+            <p className="text-gray-500 text-sm mt-2">⭐ {hotel.property.reviewScore} ({hotel.property.reviewCount} reviews)</p>
+          </div>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <p className="text-gray-500 text-lg text-center">No hotels found.</p>
+            )}
+          </div>
+
+
+          {hotels.length > 0 && (
+        <div className="flex justify-center items-center gap-4 mt-6">
+          <button
+            className="px-4 py-2 bg-gray-300 text-black rounded disabled:opacity-50"
+            disabled={page === 1}
+            onClick={() => {
+              setPage(prev => prev - 1);
+            }}
+          >
+            Previous
+          </button>
+
+          <span className="text-lg font-semibold">{page}</span>
+
+          <button
+            className="px-4 py-2 bg-yellow-400 text-black rounded"
+            onClick={() => {
+              setPage(prev => prev + 1);
+            }}
+          >
+            Next
+          </button>
+        </div>
+        )}
+
     </div>
-
-
-
-    </div>
+    
   );
+  
 };
 
 export default Dashboard;

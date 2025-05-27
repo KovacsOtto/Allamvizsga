@@ -113,7 +113,7 @@ app.get("/api/hotels", async (req, res) => {
         adults,
         children_age: children ? children.split(",").join("%2C") : "0",
         room_qty,
-        page_number: 1,
+        page_number: req.query.page_number || 1,
         units: "metric",
         temperature_unit: "c",
         languagecode: "en-us",
@@ -186,6 +186,92 @@ app.get("/api/hotels/photos/:hotel_id", async (req, res) => {
   } catch (error) {
     console.error("Error fetching hotel photos:", error);
     res.status(500).json({ status: false, message: "Failed to fetch photos" });
+  }
+});
+
+app.get("/api/hotels/description/:id", async (req, res) => {
+  try {
+    const hotelId = req.params.id;
+    const response = await axios.get("https://booking-com15.p.rapidapi.com/api/v1/hotels/getDescriptionAndInfo", {
+      params: {
+        hotel_id: hotelId,
+        languagecode: "en-us",
+      },
+      headers: {
+        "x-rapidapi-key": process.env.RAPIDAPI_KEY,
+        "x-rapidapi-host": "booking-com15.p.rapidapi.com",
+      },
+    });
+
+    console.log("Full API Response:", response.data); 
+
+    if (response.data && response.data.data.length > 0) {
+      const englishDescriptions = response.data.data.filter(desc => desc.languagecode === "en-us");
+      
+      const description = englishDescriptions.length > 0 ? englishDescriptions[0].description : response.data.data[0].description;
+
+      console.log("Extracted Description:", description); 
+      console.log("response",response.data);
+
+      res.json({ success: true, description: description || "No description available." });
+    } else {
+      res.json({ success: false, message: "No description found" });
+    }
+  } catch (error) {
+    console.error("Error fetching hotel description:", error);
+    res.status(500).json({ success: false, message: "Internal Server Error" });
+  }
+});
+
+app.get('/api/attractions/search', async (req, res) => {
+  const { query } = req.query;
+
+  if (!query) {
+    return res.status(400).json({ error: "Missing query parameter" });
+  }
+
+  try {
+    const response = await axios.get('https://booking-com15.p.rapidapi.com/api/v1/attraction/searchLocation', {
+      params: {
+        query: query,
+        languagecode: 'en-us'
+      },
+      headers: {
+        'x-rapidapi-key': process.env.RAPIDAPI_KEY,
+        'x-rapidapi-host': 'booking-com15.p.rapidapi.com'
+      }
+    });
+
+    res.json({ data: response.data.data || [] });
+  } catch (error) {
+    console.error('Error fetching attractions search:', error);
+    res.status(500).json({ error: 'Failed to fetch attractions' });
+  }
+});
+
+app.get('/api/attractions/details', async (req, res) => {
+  const { slug } = req.query;
+
+  if (!slug) {
+    return res.status(400).json({ error: "Missing slug parameter" });
+  }
+
+  try {
+    const response = await axios.get('https://booking-com15.p.rapidapi.com/api/v1/attraction/getAttractionDetails', {
+      params: {
+        slug: slug,
+        currency_code: 'USD'
+      },
+      headers: {
+        'x-rapidapi-key': process.env.RAPIDAPI_KEY,
+        'x-rapidapi-host': 'booking-com15.p.rapidapi.com'
+      }
+    });
+
+    res.json({ data: response.data.data });
+  } catch (error) {
+    console.error('Error fetching attraction details:', error);
+    res.status(500).json({ error: 'Failed to fetch attraction details' });
   }
 });
 
