@@ -82,33 +82,26 @@ const HotelDetail = () => {
     fetchHotelDetails();
     fetchHotelPhotos();
     fetchHotelDescription();
+  }, [id, check_in, check_out, adults, children, room_qty]);
 
-    const fetchAttractions = async () => {
-      if (!hotel || !hotel.city) return;
-  
-      setLoadingAttractions(true);
-      try {
-        const searchRes = await axios.get('http://localhost:5000/api/attractions/search', {
-          params: { query: hotel.city },
-        });
-  
-        const slugs = (searchRes.data.data || []).slice(0, 5).map(item => item.productSlug);
-  
-        const details = await Promise.all(slugs.map(slug =>
-          axios.get('http://localhost:5000/api/attractions/details', { params: { slug } })
-        ));
-  
-        const attractionsData = details.map(d => d.data.data);
-        setAttractions(attractionsData);
-      } catch (err) {
-        console.error("Failed to fetch attractions:", err);
-      }
-      setLoadingAttractions(false);
-    };
-  
-    fetchAttractions();
-  }, [id, check_in, check_out, adults, children, room_qty,hotel]);
 
+  useEffect(() => {
+    if (hotel?.city || hotel?.city_name || hotel?.city_name_translated) {
+      const cityQuery = hotel.city || hotel.city_name || hotel.city_name_translated;
+      console.log("Város a lekéréshez:", cityQuery);
+  
+      axios.get("http://localhost:5000/api/attractions/by-city", {
+        params: { city: cityQuery }
+      })
+        .then(res => {
+          console.log("Látnivalók:", res.data.data);
+          setAttractions(res.data.data);
+        })
+        .catch(err => console.error("Attraction fetch failed", err));
+    }
+  }, [hotel]);
+  
+  
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen bg-gray-100">
@@ -190,23 +183,18 @@ const HotelDetail = () => {
 
 
         </div>
-        {loadingAttractions ? (
-        <p className="text-center mt-6 text-gray-500">Loading attractions...</p>
-          ) : attractions.length > 0 && (
-            <div className="mt-12">
-              <h2 className="text-2xl font-bold mb-4">Things to do nearby</h2>
-              <div className="flex overflow-x-auto space-x-4">
-                {attractions.map((item, idx) => (
-                  <div key={idx} className="min-w-[250px] bg-white rounded-lg shadow-md p-4">
-                    <img
-                      src={item.coverImageUrl || "https://via.placeholder.com/300"}
-                      alt={item.title}
-                      className="rounded-lg mb-2 object-cover h-40 w-full"
-                    />
-                    <h3 className="font-semibold">{item.title}</h3>
-                    <p className="text-sm text-gray-600">{item.duration || 'Duration: N/A'}</p>
-                    <p className="text-green-600 font-bold mt-1">{item.price?.value ? `$${item.price.value}` : 'Price N/A'}</p>
-                  </div>
+        {attractions.length > 0 && (
+            <div className="mt-10">
+              <h2 className="text-2xl font-semibold mb-4">Nearby Attractions</h2>
+              <div className="flex overflow-x-auto space-x-4 pb-4">
+                {attractions.map((a, index) => (
+                  <div key={index} className="min-w-[250px] bg-white rounded-lg shadow p-2">
+                    <img src={a.primaryPhoto?.small} alt={a.name} className="w-full h-40 object-cover rounded" />
+                    <h3 className="text-lg font-semibold mt-2">{a.name}</h3>
+                    <p className="text-sm text-gray-500">{a.shortDescription}</p>
+                    <p className="text-green-600 font-semibold mt-1">
+                    {(a.representativePrice?.publicAmount * exchangeRates[currency]).toFixed(2)} {currency}
+                  </p>                  </div>
                 ))}
               </div>
             </div>

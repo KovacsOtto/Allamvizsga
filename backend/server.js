@@ -223,17 +223,14 @@ app.get("/api/hotels/description/:id", async (req, res) => {
   }
 });
 
-app.get('/api/attractions/search', async (req, res) => {
-  const { query } = req.query;
-
-  if (!query) {
-    return res.status(400).json({ error: "Missing query parameter" });
-  }
+app.get('/api/attractions/by-city', async (req, res) => {
+  const { city } = req.query;
+  if (!city) return res.status(400).json({ error: "Missing city parameter" });
 
   try {
-    const response = await axios.get('https://booking-com15.p.rapidapi.com/api/v1/attraction/searchLocation', {
+    const searchRes = await axios.get('https://booking-com15.p.rapidapi.com/api/v1/attraction/searchLocation', {
       params: {
-        query: query,
+        query: city,
         languagecode: 'en-us'
       },
       headers: {
@@ -242,25 +239,20 @@ app.get('/api/attractions/search', async (req, res) => {
       }
     });
 
-    res.json({ data: response.data.data || [] });
-  } catch (error) {
-    console.error('Error fetching attractions search:', error);
-    res.status(500).json({ error: 'Failed to fetch attractions' });
-  }
-});
+    const productData = searchRes.data.data?.products?.[0];
+    if (!productData || !productData.id) {
+      return res.status(404).json({ error: "No matching product location found for this city." });
+    }
 
-app.get('/api/attractions/details', async (req, res) => {
-  const { slug } = req.query;
+    const locationId = productData.id;
 
-  if (!slug) {
-    return res.status(400).json({ error: "Missing slug parameter" });
-  }
-
-  try {
-    const response = await axios.get('https://booking-com15.p.rapidapi.com/api/v1/attraction/getAttractionDetails', {
+    const attractionRes = await axios.get('https://booking-com15.p.rapidapi.com/api/v1/attraction/searchAttractions', {
       params: {
-        slug: slug,
-        currency_code: 'USD'
+        id: locationId,
+        sortBy: 'trending',
+        page: '1',
+        currency_code: 'EUR',
+        languagecode: 'en-us'
       },
       headers: {
         'x-rapidapi-key': process.env.RAPIDAPI_KEY,
@@ -268,12 +260,15 @@ app.get('/api/attractions/details', async (req, res) => {
       }
     });
 
-    res.json({ data: response.data.data });
+    const products = attractionRes.data.data?.products || [];
+    res.json({ success: true, data: products });
   } catch (error) {
-    console.error('Error fetching attraction details:', error);
-    res.status(500).json({ error: 'Failed to fetch attraction details' });
+    console.error("Attraction Fetch Error:", error);
+    res.status(500).json({ success: false, message: "Failed to fetch attractions." });
   }
 });
+
+
 
 
 app.listen(5000, () => {
