@@ -6,6 +6,7 @@ import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard"; 
 import Navbar from "./components/Navbar";
 import HotelDetail from "./pages/HotelDetail";
+import Profile from "./pages/Profile";
 
 
 const Layout = ({ children, currency, setCurrency }) => {
@@ -30,7 +31,8 @@ function App() {
           <Route path="/auth" element={<Auth />} />
           <Route path="/register" element={<Register />} />
           <Route path="/dashboard" element={<Dashboard currency={currency} />} />
-          <Route path="/hotel/:id" element={<HotelDetail />} />
+          <Route path="/hotel/:id" element={<HotelDetail currency={currency}/>} />
+          <Route path="/profile" element={<Profile  currency={currency} setCurrency={setCurrency} />} />
         </Routes>
       </Layout>
     </Router>

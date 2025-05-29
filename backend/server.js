@@ -55,8 +55,54 @@ app.post("/login", (req, res) => {
       if (!isMatch) return res.status(401).json({ message: "Invalid credentials" });
 
       const token = jwt.sign({ userId: user.id, full_name: user.full_name }, "secret_key", { expiresIn: "1h" });
-      res.json({ message: "Login successful", token });
+      res.json({
+        message: "Login successful",
+        token,
+        id: user.id,
+        full_name: user.full_name,
+        email: user.email,
+        created_at: user.created_at
+      });
     });
+  });
+});
+
+app.post("/api/bookings", (req, res) => {
+  const {
+    user_id,
+    hotel_id,
+    hotel_name,
+    hotel_address,
+    check_in_date,
+    check_out_date,
+    num_adults,
+    num_children,
+    num_rooms,
+    total_price,
+    currency,
+    hotel_image_url
+  } = req.body;
+  
+  const sql = `
+    INSERT INTO bookings (
+      user_id, hotel_id, hotel_name, hotel_address,
+      check_in_date, check_out_date, num_adults, num_children,
+      num_rooms, total_price, currency, hotel_image_url
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `;
+  
+  db.query(sql, [
+    user_id, hotel_id, hotel_name, hotel_address,
+    check_in_date, check_out_date, num_adults, num_children,
+    num_rooms, total_price, currency, hotel_image_url
+  ], (err, result) => {
+    if (err) {
+      console.error("Booking insert failed:", err);
+      return res.status(500).json({ error: "Booking failed" });
+    }
+  
+    res.json({ message: "Booking successful", booking_id: result.insertId });
   });
 });
 
@@ -268,6 +314,20 @@ app.get('/api/attractions/by-city', async (req, res) => {
   }
 });
 
+app.get("/api/bookings/:userId", (req, res) => {
+  const userId = req.params.userId;
+
+  const sql = `
+    SELECT * FROM bookings 
+    WHERE user_id = ?
+    ORDER BY check_in_date DESC
+  `;
+
+  db.query(sql, [userId], (err, results) => {
+    if (err) return res.status(500).json({ error: "Database error" });
+    res.json(results);
+  });
+});
 
 
 

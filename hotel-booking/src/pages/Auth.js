@@ -17,6 +17,14 @@ const Auth = () => {
     try {
       const res = await axios.post("http://localhost:5000/login", credentials);
       localStorage.setItem("token", res.data.token);
+
+      localStorage.setItem("user", JSON.stringify({
+        id: res.data.id,
+        full_name: res.data.full_name,
+        email: res.data.email,
+        created_at: res.data.created_at
+      }));
+
       navigate("/dashboard");
     } catch (err) {
       setError("Invalid email or password.");

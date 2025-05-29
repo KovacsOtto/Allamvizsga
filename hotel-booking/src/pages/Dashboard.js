@@ -82,7 +82,11 @@ const Dashboard = ({ currency, setCurrency }) => {
     HUF: 350,
     LEI: 4.5,
   };
-  
+  const getNights = () => {
+    const start = new Date(dates[0].startDate);
+    const end = new Date(dates[0].endDate);
+    return Math.ceil((end - start) / (1000 * 60 * 60 * 24));
+  };
 
   const convertPrice = (aedPrice) => {
     const usdPrice = aedPrice * 0.27; 
@@ -237,7 +241,7 @@ const Dashboard = ({ currency, setCurrency }) => {
               check_in: format(dates[0].startDate, "yyyy-MM-dd"),
               check_out: format(dates[0].endDate, "yyyy-MM-dd"),
               adults: guests.adults,
-              children: guests.children > 0 ? Array(guests.children).fill(5).join(",") : "",
+              children: guests.children,
               room_qty: guests.rooms,
             }).toString();
     
@@ -261,9 +265,14 @@ const Dashboard = ({ currency, setCurrency }) => {
               
               
           <div className="flex flex-col items-end justify-between h-full">
-            <p className="text-green-600 font-bold text-lg">
-              {convertPrice(hotel.property.priceBreakdown.grossPrice.value)} {currency}
-            </p>
+          <p className="text-green-600 font-bold text-lg">
+          {convertPrice(hotel.property.priceBreakdown.grossPrice.value * getNights() * guests.rooms)} {currency}
+        </p>
+        <p className="text-sm text-gray-500">
+          ({guests.rooms} room{guests.rooms > 1 ? "s" : ""} · {getNights()} night{getNights() > 1 ? "s" : ""})
+        </p>
+          <p className="text-sm text-gray-500">
+          </p>
             <p className="text-gray-500 text-sm mt-2">⭐ {hotel.property.reviewScore} ({hotel.property.reviewCount} reviews)</p>
           </div>
                   </div>

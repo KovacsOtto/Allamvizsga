@@ -22,6 +22,7 @@ const HotelDetail = () => {
   const [currency, setCurrency] = useState(localStorage.getItem("currency") || "USD");
   const [attractions, setAttractions] = useState([]);
   const [loadingAttractions, setLoadingAttractions] = useState(false);
+  const [showReservationModal, setShowReservationModal] = useState(false);
 
   const searchParams = new URLSearchParams(location.search);
   const check_in = searchParams.get("check_in");
@@ -87,7 +88,8 @@ const HotelDetail = () => {
 
   useEffect(() => {
     if (hotel?.city || hotel?.city_name || hotel?.city_name_translated) {
-      const cityQuery = hotel.city || hotel.city_name || hotel.city_name_translated;
+      const rawCity = hotel.city || hotel.city_name || hotel.city_name_translated;
+      const cityQuery = rawCity.split(":")[0];
       console.log("Város a lekéréshez:", cityQuery);
   
       axios.get("http://localhost:5000/api/attractions/by-city", {
@@ -121,7 +123,15 @@ const HotelDetail = () => {
   const convertPrice = (amount) => {
     return (amount * exchangeRates[currency]).toFixed(2);
   };
-
+  const nights = Math.ceil((new Date(check_out) - new Date(check_in)) / (1000 * 60 * 60 * 24));
+  const calculateTotalPrice = () => {
+    const base = hotel?.product_price_breakdown?.gross_amount?.value;
+    if (!base || isNaN(base)) return null;
+  
+    const nights = Math.ceil((new Date(check_out) - new Date(check_in)) / (1000 * 60 * 60 * 24)) || 1;
+    return (base * room_qty * nights * exchangeRates[currency]).toFixed(2);
+  };
+  
   return (
     <>
       <Navbar setCurrency={setCurrency} />
@@ -171,14 +181,23 @@ const HotelDetail = () => {
           </div>
           
           <div className="flex flex-col-reverse items-end justify-end w-1/3 ">
-            <p className="text-lg mt-4">⭐ {hotel.review_nr || "No rating"} reviews</p>
-            <p className="text-lg text-green-600 font-bold">
-              {hotel.product_price_breakdown?.gross_amount?.value
-                ? convertPrice(hotel.product_price_breakdown.gross_amount.value)
-                : "No Price"} {currency}
+          <button
+            className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded shadow mt-4"
+            onClick={() => {
+              setShowReservationModal(true);
+            }}
+          >
+            ReserV now
+          </button>
 
-            </p>
-          </div>
+          <p className="text-lg mt-4">⭐ {hotel.review_nr || "No rating"} reviews</p>
+          <p className="text-lg text-green-600 font-bold">
+          {calculateTotalPrice()} {currency}
+        </p>
+        <p className="text-sm text-gray-500">
+          ({room_qty} room{room_qty > 1 ? "s" : ""})
+        </p>
+        </div>
           
 
 
@@ -251,6 +270,67 @@ const HotelDetail = () => {
           </div>
         )}
       </div>
+      {showReservationModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg shadow-lg max-w-md w-full relative">
+            <button
+              className="absolute top-2 right-2 text-gray-600 hover:text-black text-xl"
+              onClick={() => setShowReservationModal(false)}
+            >
+              ✖
+            </button>
+            <h2 className="text-2xl font-semibold mb-4">Confirm Reservation</h2>
+            <div className="space-y-2 text-sm text-gray-800">
+              <p><strong>Hotel:</strong> {hotel.hotel_name}</p>
+              <p><strong>Address:</strong> {hotel.address}</p>
+              <p><strong>Check-in:</strong> {check_in}</p>
+              <p><strong>Check-out:</strong> {check_out}</p>
+              <p><strong>Adults:</strong> {adults}</p>
+              <p><strong>Children:</strong> {children}</p>
+              <p><strong>Rooms:</strong> {room_qty}</p>
+              <p><strong>Total Price:</strong> {calculateTotalPrice()} {currency}</p>
+            </div>
+              <button
+              className="w-full mt-6 bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg"
+              onClick={async () => {
+                const user = JSON.parse(localStorage.getItem("user"));
+                if (!user) {
+                  alert("You must be logged in to book.");
+                  return;
+                }
+
+                const bookingData = {
+                  user_id: user.id,
+                  hotel_id: hotel.hotel_id || id,
+                  hotel_name: hotel.hotel_name,
+                  hotel_address: hotel.address,
+                  check_in_date: check_in,
+                  check_out_date: check_out,
+                  num_adults: adults,
+                  num_children: children,
+                  num_rooms: room_qty,
+                  total_price: parseFloat(calculateTotalPrice()),
+                  currency,
+                  hotel_image_url: photos?.[0]?.url || null
+                };
+
+                try {
+                  const res = await axios.post("http://localhost:5000/api/bookings", bookingData);
+                  alert("Reservation successful!");
+                  setShowReservationModal(false);
+                } catch (err) {
+                  console.error("Booking error:", err);
+                  alert("Booking failed. Try again.");
+                }
+              }}
+            >
+              Confirm Reservation
+            </button>
+
+          </div>
+        </div>
+      )}
+
     </>
   );
 };
