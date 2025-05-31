@@ -2,7 +2,7 @@ import { useParams, useLocation } from "react-router-dom";
 import { useEffect, useState } from "react";
 import axios from "axios";
 import Navbar from "../components/Navbar";
-
+import SuccessPopup from "../components/SuccessPopup"; 
 
 const exchangeRates = {
   EUR: 1,
@@ -23,6 +23,9 @@ const HotelDetail = () => {
   const [attractions, setAttractions] = useState([]);
   const [loadingAttractions, setLoadingAttractions] = useState(false);
   const [showReservationModal, setShowReservationModal] = useState(false);
+  const [isFavorite, setIsFavorite] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [showPopup, setShowPopup] = useState(false);
 
   const searchParams = new URLSearchParams(location.search);
   const check_in = searchParams.get("check_in");
@@ -101,6 +104,40 @@ const HotelDetail = () => {
         })
         .catch(err => console.error("Attraction fetch failed", err));
     }
+    const handleAddToFavorites = async () => {
+      const user = JSON.parse(localStorage.getItem("user"));
+      if (!user || !user.id) return alert("Please log in to save favorites.");
+    
+      try {
+        await axios.post("http://localhost:5000/api/favorites", {
+          user_id: user.id,
+          hotel_id: id,
+          hotel_name: hotel.hotel_name,
+          hotel_address: hotel.address,
+          hotel_image_url: photos?.[0]?.url || "",
+        });
+    
+        alert("Hotel saved to favorites!");
+      } catch (err) {
+        console.error("Failed to add favorite:", err);
+        alert("Failed to save favorite.");
+      }
+    };
+    
+  }, [hotel]);
+  useEffect(() => {
+    const user = JSON.parse(localStorage.getItem("user"));
+    if (!user?.id || !hotel?.hotel_id) return;
+  
+    axios
+      .get(`http://localhost:5000/api/favorites/${user.id}`)
+      .then((res) => {
+        const isFav = res.data.some((fav) => fav.hotel_id == hotel.hotel_id);
+        setIsFavorite(isFav);
+      })
+      .catch((err) => {
+        console.error("Could not load favorites", err);
+      });
   }, [hotel]);
   
   
@@ -178,26 +215,88 @@ const HotelDetail = () => {
               </ul>
             )}
             
-          </div>
+        </div>
           
-          <div className="flex flex-col-reverse items-end justify-end w-1/3 ">
+        <div className="flex flex-col-reverse items-end justify-end w-1/3">
+  
+
+          <button
+            onClick={async () => {
+              const user = JSON.parse(localStorage.getItem("user"));
+              if (!user?.id) return alert("Please log in to use favorites.");
+            
+              try {
+                if (isFavorite) {
+                  await axios.delete(`http://localhost:5000/api/favorites/${user.id}/${id}`);
+                  setIsFavorite(false);
+                } else {
+                  await axios.post("http://localhost:5000/api/favorites", {
+                    user_id: user.id,
+                    hotel_id: id,
+                    hotel_name: hotel.hotel_name,
+                    hotel_address: hotel.address,
+                    hotel_image_url: photos?.[0]?.url || ""
+                  });
+                  setIsFavorite(true);
+                }
+              } catch (err) {
+                console.error("Favorite toggle error:", err);
+                alert("Something went wrong.");
+              }
+            }}
+            
+            className="mt-4 transform hover:scale-110"
+            title={isFavorite ? "Saved to Favorites" : "Add to Favorites"}
+          >
+            {isFavorite ? (
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-7 w-7 text-green-600 fill-current"
+                viewBox="0 0 24 24"
+              >
+                <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 
+                        2 5.42 4.42 3 7.5 3c1.74 0 3.41 0.81 
+                        4.5 2.09C13.09 3.81 14.76 3 16.5 3 
+                        19.58 3 22 5.42 22 8.5c0 
+                        3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+              </svg>
+            ) : (
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-7 w-7 text-green-600 stroke-current fill-transparent"
+                fill="none"
+                viewBox="0 0 24 24"
+                strokeWidth={2}
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 
+                    2 8.5 2 5.42 4.42 3 7.5 3c1.74 
+                    0 3.41 0.81 4.5 2.09C13.09 
+                    3.81 14.76 3 16.5 3 19.58 3 
+                    22 5.42 22 8.5c0 3.78-3.4 
+                    6.86-8.55 11.54L12 21.35z"
+                />
+              </svg>
+            )}
+          </button>
           <button
             className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded shadow mt-4"
-            onClick={() => {
-              setShowReservationModal(true);
-            }}
+            onClick={() => setShowReservationModal(true)}
           >
             ReserV now
           </button>
-
           <p className="text-lg mt-4">⭐ {hotel.review_nr || "No rating"} reviews</p>
           <p className="text-lg text-green-600 font-bold">
-          {calculateTotalPrice()} {currency}
-        </p>
-        <p className="text-sm text-gray-500">
-          ({room_qty} room{room_qty > 1 ? "s" : ""})
-        </p>
+            {calculateTotalPrice()} {currency}
+          </p>
+          <p className="text-sm text-gray-500">
+            ({room_qty} room{room_qty > 1 ? "s" : ""})
+          </p>
         </div>
+
           
 
 
@@ -316,7 +415,7 @@ const HotelDetail = () => {
 
                 try {
                   const res = await axios.post("http://localhost:5000/api/bookings", bookingData);
-                  alert("Reservation successful!");
+                  setShowPopup(true);
                   setShowReservationModal(false);
                 } catch (err) {
                   console.error("Booking error:", err);
@@ -328,8 +427,11 @@ const HotelDetail = () => {
             </button>
 
           </div>
+
         </div>
       )}
+      {showPopup && <SuccessPopup onClose={() => setShowPopup(false)} />}
+
 
     </>
   );

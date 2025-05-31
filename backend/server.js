@@ -106,6 +106,21 @@ app.post("/api/bookings", (req, res) => {
   });
 });
 
+app.post("/api/favorites", (req, res) => {
+  const { user_id, hotel_id, hotel_name, hotel_address, hotel_image_url } = req.body;
+
+  const sql = `
+    INSERT INTO favorites (user_id, hotel_id, hotel_name, hotel_address, hotel_image_url)
+    VALUES (?, ?, ?, ?, ?)
+  `;
+
+  db.query(sql, [user_id, hotel_id, hotel_name, hotel_address, hotel_image_url], (err) => {
+    if (err) return res.status(500).json({ error: "Database error" });
+    res.json({ message: "Favorite saved" });
+  });
+});
+
+
 app.get("/api/search", async (req, res) => {
   const { query } = req.query;
 
@@ -328,6 +343,66 @@ app.get("/api/bookings/:userId", (req, res) => {
     res.json(results);
   });
 });
+
+app.get("/api/favorites/:userId", (req, res) => {
+  const userId = req.params.userId;
+
+  const sql = "SELECT * FROM favorites WHERE user_id = ?";
+  db.query(sql, [userId], (err, results) => {
+    if (err) return res.status(500).json({ error: "Database error" });
+    res.json(results);
+  });
+});
+
+app.delete("/api/favorites/:userId/:hotelId", (req, res) => {
+  const { userId, hotelId } = req.params;
+
+  const sql = "DELETE FROM favorites WHERE user_id = ? AND hotel_id = ?";
+  db.query(sql, [userId, hotelId], (err, result) => {
+    if (err) return res.status(500).json({ error: "Failed to delete favorite" });
+    res.json({ success: true });
+  });
+});
+
+app.get('/api/hotels/available', async (req, res) => {
+  const { hotelIds, check_in, check_out } = req.query;
+
+  if (!hotelIds || !check_in || !check_out) {
+    return res.status(400).json({ error: "Missing hotelIds, check_in, or check_out parameter" });
+  }
+
+  const hotelIdList = hotelIds.split(',');
+
+  try {
+    const availabilityChecks = hotelIdList.map(hotel_id =>
+      axios.get('https://booking-com15.p.rapidapi.com/api/v1/hotels/getAvailability', {
+        params: {
+          hotel_id,
+          min_date: check_in,
+          max_date: check_out
+        },
+        headers: {
+          'x-rapidapi-key': process.env.RAPIDAPI_KEY,
+          'x-rapidapi-host': 'booking-com15.p.rapidapi.com'
+        }
+      }).then(response => {
+        const dates = response.data?.data?.avDates;
+        const isAvailable = Array.isArray(dates) && dates.length > 0;
+        return isAvailable ? hotel_id : null;
+      }).catch(() => null) 
+    );
+
+    const results = await Promise.all(availabilityChecks);
+    const availableHotels = results.filter(id => id !== null);
+
+    res.json({ success: true, available: availableHotels });
+  } catch (error) {
+    console.error("Hotel Availability Error:", error.response?.data || error.message);
+    res.status(500).json({ success: false, message: "Failed to check availability." });
+  }
+});
+
+
 
 
 

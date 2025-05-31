@@ -2,12 +2,20 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import axios from "axios";
+import { Link } from "react-router-dom";
 
 const Profile = ({ currency, setCurrency }) => {
   const user = JSON.parse(localStorage.getItem("user"));
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("profile");
   const [bookings, setBookings] = useState([]);
+  const [favorites, setFavorites] = useState([]);
+  const savedSearch = JSON.parse(localStorage.getItem("dashboardSearch")) || {};
+  const check_in = savedSearch.dates?.[0]?.startDate?.slice(0, 10) || "2025-06-26";
+  const check_out = savedSearch.dates?.[0]?.endDate?.slice(0, 10) || "2025-06-29";
+  const adults = savedSearch.guests?.adults || 2;
+  const children = savedSearch.guests?.children || 0;
+  const room_qty = savedSearch.guests?.rooms || 1;
 
   useEffect(() => {
     if (activeTab === "bookings" && user?.id) {
@@ -17,7 +25,19 @@ const Profile = ({ currency, setCurrency }) => {
     }
   }, [activeTab, user?.id]);
   
-
+  useEffect(() => {
+    if (activeTab === "favorites" && user?.id) {
+      axios
+        .get(`http://localhost:5000/api/favorites/${user.id}`)
+        .then((res) => {
+          setFavorites(res.data);
+        })
+        .catch((err) => {
+          console.error("Failed to load favorites", err);
+        });
+    }
+  }, [activeTab, user?.id]);
+  
   const renderContent = () => {
     switch (activeTab) {
       case "profile":
@@ -48,35 +68,43 @@ const Profile = ({ currency, setCurrency }) => {
             ) : (
               <div className="space-y-4">
                 {bookings.map((booking, index) => (
-                  <div key={index} className="flex items-center bg-gray-50 p-4 rounded-lg shadow-sm border border-gray-200">
-                    <img
-                      src={booking.hotel_image_url || "https://via.placeholder.com/150"}
-                      alt={booking.hotel_name}
-                      className="w-28 h-28 object-cover rounded-lg mr-6"
-                    />
-                    <div>
-                      <h3 className="text-xl font-bold">{booking.hotel_name}</h3>
-                      <p className="text-gray-600 text-sm">{booking.hotel_address}</p>
-                      <p className="text-sm text-gray-700">
-                        {new Date(booking.check_in_date).toLocaleDateString("en-US", {
-                            year: "numeric",
-                            month: "long",
-                            day: "numeric"
-                        })} →{" "}
-                        {new Date(booking.check_out_date).toLocaleDateString("en-US", {
-                            year: "numeric",
-                            month: "long",
-                            day: "numeric"
-                        })}
-                      </p>
-                      <p className="text-sm text-gray-700">
-                        {booking.num_adults} adults · {booking.num_children} children · {booking.num_rooms} room(s)
-                      </p>
-                      <p className="text-green-700 font-semibold mt-1">
-                        {booking.total_price} {booking.currency}
-                      </p>
+                  <Link
+                  key={index}
+                  to={`/hotel/${booking.hotel_id}?check_in=${new Date(booking.check_in_date).toISOString().slice(0,10)}&check_out=${new Date(booking.check_out_date).toISOString().slice(0,10)}&adults=${booking.num_adults}&children=${booking.num_children}&room_qty=${booking.num_rooms}`}
+                  className="block"
+                >
+
+                    <div key={index} className="flex items-center bg-gray-50 p-4 rounded-lg shadow-sm border border-gray-200">
+                      <img
+                        src={booking.hotel_image_url || "https://via.placeholder.com/150"}
+                        alt={booking.hotel_name}
+                        className="w-28 h-28 object-cover rounded-lg mr-6"
+                      />
+                      <div>
+                        <h3 className="text-xl font-bold">{booking.hotel_name}</h3>
+                        <p className="text-gray-600 text-sm">{booking.hotel_address}</p>
+                        <p className="text-sm text-gray-700">
+                          {new Date(booking.check_in_date).toLocaleDateString("en-US", {
+                              year: "numeric",
+                              month: "long",
+                              day: "numeric"
+                          })} →{" "}
+                          {new Date(booking.check_out_date).toLocaleDateString("en-US", {
+                              year: "numeric",
+                              month: "long",
+                              day: "numeric"
+                          })}
+                        </p>
+                        <p className="text-sm text-gray-700">
+                          {booking.num_adults} adults · {booking.num_children} children · {booking.num_rooms} room(s)
+                        </p>
+                        <p className="text-green-700 font-semibold mt-1">
+                          {booking.total_price} {booking.currency}
+                        </p>
+                      </div>
                     </div>
-                  </div>
+                  </Link>
+
                 ))}
               </div>
             )}
@@ -86,9 +114,39 @@ const Profile = ({ currency, setCurrency }) => {
       case "favorites":
         return (
           <div>
-            <h2 className="text-2xl font-semibold mb-4">Favorites</h2>
-            <p className="text-gray-600">(Favorite hotels will appear here.)</p>
+          <h2 className="text-2xl font-semibold mb-4">Favorites</h2>
+          {favorites.length === 0 ? (
+          <p className="text-gray-600">You haven't saved any hotels yet.</p>
+        ) : (
+          <div className="space-y-4">
+            
+            {favorites.map((fav, index) => (
+              <Link
+                to={`/hotel/${fav.hotel_id}?check_in=${check_in}&check_out=${check_out}&adults=${adults}&children=${children}&room_qty=${room_qty}`}
+                className="block"
+              >
+              <div
+                key={index}
+                className="flex items-center bg-gray-50 p-4 rounded-lg shadow-sm border"
+              >
+                <img
+                  src={fav.hotel_image_url}
+                  alt={fav.hotel_name}
+                  className="w-24 h-24 object-cover rounded mr-4"
+                />
+                <div>
+                  <h3 className="font-bold">{fav.hotel_name}</h3>
+                  <p className="text-sm text-gray-600">{fav.hotel_address}</p>
+                </div>
+              </div>
+              </Link>
+
+            ))}
           </div>
+        )}
+
+        </div>
+
         );
       default:
         return null;

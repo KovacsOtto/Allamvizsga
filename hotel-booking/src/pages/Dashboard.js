@@ -30,6 +30,7 @@ const Dashboard = ({ currency, setCurrency }) => {
   }, [navigate]);
   useEffect(() => {
     if (destId) {
+      setLoading(true);
       handleHotelSearch();
     }
   }, [page]);
@@ -98,6 +99,7 @@ const Dashboard = ({ currency, setCurrency }) => {
       alert("Please select a destination first.");
       return;
     }
+
     localStorage.setItem("dashboardSearch", JSON.stringify({
       query,
       destId,
@@ -106,30 +108,64 @@ const Dashboard = ({ currency, setCurrency }) => {
     }));
   
     setLoading(true);
+    const check_in = format(new Date(dates[0].startDate), "yyyy-MM-dd");
+    const check_out = format(new Date(dates[0].endDate), "yyyy-MM-dd");
+  
     try {
-      const check_in = format(new Date(dates[0].startDate), "yyyy-MM-dd");
-      const check_out = format(new Date(dates[0].endDate), "yyyy-MM-dd");
-  
-      console.log(" Sending Request:", { dest_id: destId, check_in, check_out });
-  
-      const res = await axios.get("http://localhost:5000/api/hotels", {
+      let currentPage = 1;
+      let allHotels = [];
+    
+      while (allHotels.length < 10) {
+        const res = await axios.get("http://localhost:5000/api/hotels", {
+          params: {
+            dest_id: destId,
+            check_in,
+            check_out,
+            adults: guests.adults,
+            children: guests.children > 0 ? Array(guests.children).fill(5).join(",") : "",
+            room_qty: guests.rooms,
+            page_number: currentPage,
+          },
+        });
+    
+        const data = res.data?.data;
+        if (!data || !data.hotels) {
+          console.warn("No hotels in response:", res.data);
+          break;
+        }
+    
+        const hotelsBatch = data.hotels;
+        const hotelIds = hotelsBatch.map(h => h.property.id);
+    
+        const availabilityRes = await axios.get("http://localhost:5000/api/hotels/available", {
         params: {
-          dest_id: destId,
-          check_in,  
-          check_out, 
-          adults: guests.adults,
-          children: guests.children > 0 ? Array(guests.children).fill(5).join(",") : "",
-          room_qty: guests.rooms,
-          page_number: page,
-        },
+          hotelIds: hotelIds.join(","),
+          check_in,
+          check_out
+        }
       });
-  
-      console.log("Hotels API Response:", res.data);
-      setHotels(res.data.data.hotels || []);
-    } catch (err) {
-      console.error(" Failed to fetch hotels:", err);
-    }
+      console.log("Checking availability for:", hotelIds, check_in, check_out);
+        const availableIds = availabilityRes.data.available || [];
+        const availableHotels = hotelsBatch.filter(h => availableIds.includes(String(h.property.id)));
+    
+        allHotels = [...allHotels, ...availableHotels];
+    
+        if (data.pagination?.next_page_number) {
+          currentPage++;
+        } else {
+          break;
+        }
+      }
+    
+      
+    const startIdx = (page - 1) * 10;
+    const currentHotels = allHotels.slice(startIdx, startIdx + 10);
+    setHotels(currentHotels);
+  } catch (err) {
+    console.error("Failed to fetch hotels:", err);
+  }
     setLoading(false);
+    
   };
   
   
@@ -224,7 +260,10 @@ const Dashboard = ({ currency, setCurrency }) => {
             <button className="w-full px-4 py-2 bg-blue-500 text-white rounded-lg mt-2" onClick={() => setGuestOpen(false)}>Done</button>
           </div>
         )}
-        <button className="px-6 py-2 bg-green-700 text-white rounded-lg" onClick={handleHotelSearch}>
+        <button className="px-6 py-2 bg-green-700 text-white rounded-lg" onClick={() => {
+              setPage(1);           
+              handleHotelSearch(); 
+            }}>
           Search
         </button>
       </div>
@@ -291,6 +330,7 @@ const Dashboard = ({ currency, setCurrency }) => {
             disabled={page === 1}
             onClick={() => {
               setPage(prev => prev - 1);
+              window.scrollTo({ top: 0, behavior: "smooth" });
             }}
           >
             Previous
@@ -302,6 +342,7 @@ const Dashboard = ({ currency, setCurrency }) => {
             className="px-4 py-2 bg-yellow-400 text-black rounded"
             onClick={() => {
               setPage(prev => prev + 1);
+              window.scrollTo({ top: 0, behavior: "smooth" });
             }}
           >
             Next
