@@ -150,49 +150,58 @@ app.get("/api/search", async (req, res) => {
 });
 
 app.get("/api/hotels", async (req, res) => {
-  const { dest_id, check_in, check_out, adults, children, room_qty } = req.query;
-
-  console.log(" Incoming Request Params:", req.query);
+  const {
+    dest_id,
+    check_in,
+    check_out,
+    adults,
+    children,
+    room_qty,
+    price_min,
+    price_max,
+    categories_filter,
+    sort_by,
+    page_number
+  } = req.query;
 
   if (!dest_id || !check_in || !check_out || !adults || !room_qty) {
-    console.error(" Missing Parameters", req.query);
-    return res.status(400).json({ error: "Missing required parameters", received: req.query });
+    return res.status(400).json({ error: "Missing required parameters" });
   }
-
-  console.log("Correcting Date Format: Ensuring Proper API Parameters");
-  const formattedCheckIn = check_in;
-  const formattedCheckOut = check_out;
-  console.log({ formattedCheckIn, formattedCheckOut });
 
   try {
     const response = await axios.get("https://booking-com15.p.rapidapi.com/api/v1/hotels/searchHotels", {
       params: {
         dest_id,
         search_type: "CITY",
-        arrival_date: formattedCheckIn,   
-        departure_date: formattedCheckOut,
+        arrival_date: check_in,
+        departure_date: check_out,
         adults,
-        children_age: children ? children.split(",").join("%2C") : "0",
+        children_age: children || "0",
         room_qty,
-        page_number: req.query.page_number || 1,
+        page_number: page_number || 1,
         units: "metric",
         temperature_unit: "c",
         languagecode: "en-us",
         currency_code: "AED",
+        ...(price_min && { price_min }),
+        ...(price_max && { price_max }),
+        ...(categories_filter && { categories_filter }),
+        ...(sort_by && { sort_by })
       },
       headers: {
         "x-rapidapi-key": process.env.RAPIDAPI_KEY,
-        "x-rapidapi-host": "booking-com15.p.rapidapi.com",
-      },
+        "x-rapidapi-host": "booking-com15.p.rapidapi.com"
+      }
     });
 
-    console.log(" Hotels API Response:", JSON.stringify(response.data, null, 2));
+    console.log("Backend received filters:", { price_min, price_max, categories_filter, sort_by });
     res.json(response.data);
   } catch (error) {
-    console.error(" API Error:", error.response ? error.response.data : error.message);
+    console.error("API Error:", error.response?.data || error.message);
     res.status(500).json({ error: "Failed to fetch hotels" });
   }
 });
+
 
 
 app.get("/api/hotels/details/:id", async (req, res) => {
@@ -402,9 +411,67 @@ app.get('/api/hotels/available', async (req, res) => {
   }
 });
 
+app.get("/api/hotels/filters", async (req, res) => {
+  const axios = require("axios");
+  const { dest_id, search_type = "CITY", adults, children_age, room_qty, arrival_date, departure_date } = req.query;
+
+  try {
+    const response = await axios.get("https://booking-com15.p.rapidapi.com/api/v1/hotels/getFilter", {
+      params: {
+        dest_id,
+        search_type,
+        adults,
+        children_age,
+        room_qty,
+        arrival_date,      
+        departure_date     
+      },
+      headers: {
+        "x-rapidapi-host": "booking-com15.p.rapidapi.com",
+        "x-rapidapi-key": process.env.RAPIDAPI_KEY,
+      },
+    });
+
+    res.json(response.data);
+  } catch (err) {
+    console.error("Failed to fetch filters:", err.message);
+    res.status(500).json({ error: "Failed to fetch filters" });
+  }
+});
+
+app.get("/api/hotels/reviews/:id", async (req, res) => {
+  const hotelId = req.params.id;
+  const page = parseInt(req.query.page) || 1;
+
+  try {
+    const response = await axios.get("https://booking-com15.p.rapidapi.com/api/v1/hotels/getHotelReviews", {
+      params: {
+        hotel_id: hotelId,
+        sort_option_id: "sort_most_relevant",
+        page_number: page,
+        languagecode: "en-us"
+      },
+      headers: {
+        "x-rapidapi-key": process.env.RAPIDAPI_KEY,
+        "x-rapidapi-host": "booking-com15.p.rapidapi.com"
+      }
+    });
+
+    const allReviews = response.data?.data?.result || [];
+    const totalCount = response.data?.data?.count || 0;
+
+    const REVIEWS_PER_PAGE = 5;
+    const paginated = allReviews.slice(0, REVIEWS_PER_PAGE);
+    const totalScore = allReviews.reduce((sum, r) => sum + (r.average_score || 0), 0);
+    const averageScore = allReviews.length > 0 ? totalScore / allReviews.length : null;
 
 
-
+    res.json({ success: true, reviews: paginated, totalCount, averageScore });
+  } catch (error) {
+    console.error("Error fetching hotel reviews:", error);
+    res.status(500).json({ success: false, message: "Failed to fetch reviews." });
+  }
+});
 
 app.listen(5000, () => {
   console.log(" Server running on http://localhost:5000");

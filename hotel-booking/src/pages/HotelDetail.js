@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import axios from "axios";
 import Navbar from "../components/Navbar";
 import SuccessPopup from "../components/SuccessPopup"; 
+import { useNavigate } from "react-router-dom";
 
 const exchangeRates = {
   EUR: 1,
@@ -26,6 +27,12 @@ const HotelDetail = () => {
   const [isFavorite, setIsFavorite] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [showPopup, setShowPopup] = useState(false);
+  const navigate = useNavigate();
+  const [reviews, setReviews] = useState([]);
+  const [reviewPage, setReviewPage] = useState(1);
+  const [reviewTotal, setReviewTotal] = useState(0);
+  const REVIEWS_PER_PAGE = 10;
+  const [averageScore, setAverageScore] = useState(null);
 
   const searchParams = new URLSearchParams(location.search);
   const check_in = searchParams.get("check_in");
@@ -34,6 +41,27 @@ const HotelDetail = () => {
   const children = searchParams.get("children");
   const room_qty = searchParams.get("room_qty");
 
+  useEffect(() => {
+    const fetchReviews = async () => {
+      try {
+        const res = await axios.get(`http://localhost:5000/api/hotels/reviews/${id}?page=${reviewPage}`);
+        if (res.data.success && Array.isArray(res.data.reviews)) {
+          setReviews(res.data.reviews);
+          setReviewTotal(res.data.totalCount || 0);
+          setAverageScore(res.data.averageScore || null);
+        } else {
+          setReviews([]);
+          setReviewTotal(0);
+        }
+      } catch (err) {
+        console.error("Failed to fetch reviews:", err);
+        setReviews([]);
+      }
+    };
+    fetchReviews();
+  }, [id, reviewPage]);
+  
+  
   useEffect(() => {
     localStorage.setItem("currency", currency);
   }, [currency]);
@@ -55,7 +83,7 @@ const HotelDetail = () => {
         console.error("Failed to fetch hotel details:", err);
       }
     };
-
+    
     const fetchHotelPhotos = async () => {
       try {
         const res = await axios.get(`http://localhost:5000/api/hotels/photos/${id}`);
@@ -207,13 +235,17 @@ const HotelDetail = () => {
               <h2 className="text-2xl font-semibold mb-2">About this hotel</h2>
               <p className="text-gray-700 p-1">{description || "No description available."}</p>
             </div>
-            {hotel.property_highlight_strip && (
-              <ul className="mt-4 p-4">
-                {hotel.property_highlight_strip.map((highlight, index) => (
-                  <li key={index} className="text-sm text-gray-600">✔ {highlight.name}</li>
-                ))}
-              </ul>
-            )}
+            <div className="mt-4 flex flex-wrap gap-3">
+            {hotel.property_highlight_strip.map((item, index) => (
+              <span
+                key={index}
+                className="bg-green-100 text-green-800 px-4 py-2 text-sm rounded-full border border-green-300"
+              >
+                ✔ {item.name}
+              </span>
+            ))}
+          </div>
+
             
         </div>
           
@@ -288,7 +320,9 @@ const HotelDetail = () => {
           >
             ReserV now
           </button>
-          <p className="text-lg mt-4">⭐ {hotel.review_nr || "No rating"} reviews</p>
+          <p className="text-lg mt-4">
+          ⭐ {averageScore ? averageScore.toFixed(1) : "–"} · {reviewTotal} reviews
+         </p>
           <p className="text-lg text-green-600 font-bold">
             {calculateTotalPrice()} {currency}
           </p>
@@ -317,10 +351,58 @@ const HotelDetail = () => {
               </div>
             </div>
           )}
+          {reviews.length > 0 && (
+          <div className="mt-10">
+            <h2 className="text-2xl font-semibold mb-4">Hotel Reviews</h2>
+            <div className="space-y-4">
+              {reviews.map((review, index) => (
+                <div key={index} className="bg-white p-4 rounded-lg shadow">
+                  <p className="font-semibold text-lg">{review.title}</p>
+                  <p className="text-gray-700 mt-1">
+                    👍 {review.pros || "–"}<br />
+                    👎 {review.cons || "–"}
+                  </p>
+                  <div className="flex items-center gap-2 text-sm mt-2 text-gray-500">
+                    <img
+                      src={review.author?.avatar}
+                      alt="avatar"
+                      className="w-6 h-6 rounded-full"
+                    />
+                    <span>{review.author?.name || "Anonymous"}</span>
+                    <span>⭐ {review.average_score?.toFixed(1) || "–"}/5</span>
+                  </div>
+                </div>
+              ))}
+            </div>
 
-        <a href={hotel.url} target="_blank" rel="noopener noreferrer" className="mt-4 block text-blue-500 underline">
-          View on Booking.com
-        </a>
+            <div className="flex justify-center items-center gap-4 mt-6">
+              <button
+                onClick={() => setReviewPage((prev) => Math.max(prev - 1, 1))}
+                disabled={reviewPage === 1}
+                className="px-4 py-2 bg-gray-200 rounded disabled:opacity-50"
+              >
+                Previous
+              </button>
+              <span>
+                Page {reviewPage} of {Math.ceil(reviewTotal / REVIEWS_PER_PAGE)}
+              </span>
+              <button
+                onClick={() =>
+                  setReviewPage((prev) =>
+                    prev < Math.ceil(reviewTotal / REVIEWS_PER_PAGE)
+                      ? prev + 1
+                      : prev
+                  )
+                }
+                disabled={reviewPage >= Math.ceil(reviewTotal / REVIEWS_PER_PAGE)}
+                className="px-4 py-2 bg-gray-200 rounded disabled:opacity-50"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
+        
         {showGallery && (
           <div className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50">
             <div className="relative w-full max-w-4xl">
@@ -378,7 +460,7 @@ const HotelDetail = () => {
             >
               ✖
             </button>
-            <h2 className="text-2xl font-semibold mb-4">Confirm Reservation</h2>
+            <h2 className="text-2xl font-semibold mb-4">  Confirm Reservation</h2>
             <div className="space-y-2 text-sm text-gray-800">
               <p><strong>Hotel:</strong> {hotel.hotel_name}</p>
               <p><strong>Address:</strong> {hotel.address}</p>
@@ -389,12 +471,12 @@ const HotelDetail = () => {
               <p><strong>Rooms:</strong> {room_qty}</p>
               <p><strong>Total Price:</strong> {calculateTotalPrice()} {currency}</p>
             </div>
-              <button
+            <button
               className="w-full mt-6 bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg"
-              onClick={async () => {
+              onClick={() => {
                 const user = JSON.parse(localStorage.getItem("user"));
                 if (!user) {
-                  alert("You must be logged in to book.");
+                  alert("You must be logged in to proceed to payment.");
                   return;
                 }
 
@@ -413,18 +495,14 @@ const HotelDetail = () => {
                   hotel_image_url: photos?.[0]?.url || null
                 };
 
-                try {
-                  const res = await axios.post("http://localhost:5000/api/bookings", bookingData);
-                  setShowPopup(true);
-                  setShowReservationModal(false);
-                } catch (err) {
-                  console.error("Booking error:", err);
-                  alert("Booking failed. Try again.");
-                }
+                localStorage.setItem("pendingBooking", JSON.stringify(bookingData));
+                setShowReservationModal(false);
+                navigate("/payment");
               }}
             >
-              Confirm Reservation
+              Continue to Payment
             </button>
+
 
           </div>
 
