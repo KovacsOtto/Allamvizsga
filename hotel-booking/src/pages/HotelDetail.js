@@ -33,7 +33,15 @@ const HotelDetail = () => {
   const [reviewTotal, setReviewTotal] = useState(0);
   const REVIEWS_PER_PAGE = 10;
   const [averageScore, setAverageScore] = useState(null);
-
+  const [showAttractionModal, setShowAttractionModal] = useState(false);
+  const [selectedAttractions, setSelectedAttractions] = useState([]);
+  const [showAttractionSuccess, setShowAttractionSuccess] = useState(false);
+  const [infoAttraction, setInfoAttraction] = useState(null);
+  const [showInfoModal, setShowInfoModal] = useState(false);
+  const [showAttractionGallery, setShowAttractionGallery] = useState(false);
+  const [selectedAttractionIndex, setSelectedAttractionIndex] = useState(0);
+  const recommendedPrice = location.state?.recommendedPrice || null;
+  
   const searchParams = new URLSearchParams(location.search);
   const check_in = searchParams.get("check_in");
   const check_out = searchParams.get("check_out");
@@ -82,6 +90,7 @@ const HotelDetail = () => {
       } catch (err) {
         console.error("Failed to fetch hotel details:", err);
       }
+      
     };
     
     const fetchHotelPhotos = async () => {
@@ -110,6 +119,7 @@ const HotelDetail = () => {
         console.error("Failed to fetch hotel description:", error);
       }
     };
+    
 
     fetchHotelDetails();
     fetchHotelPhotos();
@@ -128,6 +138,7 @@ const HotelDetail = () => {
       })
         .then(res => {
           console.log("Látnivalók:", res.data.data);
+          
           setAttractions(res.data.data);
         })
         .catch(err => console.error("Attraction fetch failed", err));
@@ -194,7 +205,40 @@ const HotelDetail = () => {
     if (!base || isNaN(base)) return null;
   
     const nights = Math.ceil((new Date(check_out) - new Date(check_in)) / (1000 * 60 * 60 * 24)) || 1;
-    return (base * room_qty * nights * exchangeRates[currency]).toFixed(2);
+    const hotelCost = base * room_qty * nights * exchangeRates[currency];
+    const attractionCost = calculateAttractionTotal();
+
+    return (hotelCost + attractionCost).toFixed(2);
+  };
+  const handleAttractionInfoClick = async (slug) => {
+    try {
+      const currencyCode = currency === "LEI" ? "RON" : currency;
+      const res = await axios.get("http://localhost:5000/api/attractions/details", {
+        params: {
+          slug,
+          currency_code: currencyCode
+        }
+      });
+      console.log("Slug:", slug);
+      console.log("Axios full response:", res);
+      console.log("Extracted data:", res.data?.data);
+      if (res.data && res.data.data) {
+        setInfoAttraction(res.data.data);
+        setShowInfoModal(true);
+      } else {
+        alert("No details available.");
+      }
+    } catch (err) {
+      console.error("Attraction details fetch failed:", err.response?.data || err.message || err);
+    }
+    
+  };
+
+  const calculateAttractionTotal = () => {
+    return selectedAttractions.reduce((sum, attr) => {
+      const price = attr.representativePrice?.publicAmount || 0;
+      return sum + price;
+    }, 0) * exchangeRates[currency];
   };
   
   return (
@@ -324,7 +368,7 @@ const HotelDetail = () => {
           ⭐ {averageScore ? averageScore.toFixed(1) : "–"} · {reviewTotal} reviews
          </p>
           <p className="text-lg text-green-600 font-bold">
-            {calculateTotalPrice()} {currency}
+          {calculateTotalPrice() || recommendedPrice || "–"} {currency}
           </p>
           <p className="text-sm text-gray-500">
             ({room_qty} room{room_qty > 1 ? "s" : ""})
@@ -340,13 +384,33 @@ const HotelDetail = () => {
               <h2 className="text-2xl font-semibold mb-4">Nearby Attractions</h2>
               <div className="flex overflow-x-auto space-x-4 pb-4">
                 {attractions.map((a, index) => (
-                  <div key={index} className="min-w-[250px] bg-white rounded-lg shadow p-2">
-                    <img src={a.primaryPhoto?.small} alt={a.name} className="w-full h-40 object-cover rounded" />
+                  <div key={index} className="relative min-w-[250px] bg-white rounded-lg shadow p-2">
+                     <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleAttractionInfoClick(a.slug);
+                      }}
+                      className="absolute top-2 right-2 text-blue-600 hover:text-blue-800"
+                      title="More Info"
+                    >
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        className="h-6 w-6"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        strokeWidth={2}
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M12 2a10 10 0 110 20 10 10 0 010-20z" />
+                      </svg>
+                    </button>
+                    <img src={a.primaryPhoto?.small} alt={a.name} className="w-full h-40 object-cover object-center rounded" />
                     <h3 className="text-lg font-semibold mt-2">{a.name}</h3>
                     <p className="text-sm text-gray-500">{a.shortDescription}</p>
                     <p className="text-green-600 font-semibold mt-1">
                     {(a.representativePrice?.publicAmount * exchangeRates[currency]).toFixed(2)} {currency}
-                  </p>                  </div>
+                  </p>                  
+                  </div>
                 ))}
               </div>
             </div>
@@ -469,6 +533,8 @@ const HotelDetail = () => {
               <p><strong>Adults:</strong> {adults}</p>
               <p><strong>Children:</strong> {children}</p>
               <p><strong>Rooms:</strong> {room_qty}</p>
+              <p><strong>Total Hotel Price:</strong> {(hotel?.product_price_breakdown?.gross_amount?.value * room_qty * nights * exchangeRates[currency]).toFixed(2)} {currency}</p>
+              <p><strong>Activities Price:</strong> {calculateAttractionTotal().toFixed(2)} {currency}</p>
               <p><strong>Total Price:</strong> {calculateTotalPrice()} {currency}</p>
             </div>
             <button
@@ -479,12 +545,13 @@ const HotelDetail = () => {
                   alert("You must be logged in to proceed to payment.");
                   return;
                 }
+                let country = hotel.country_trans || "";
 
                 const bookingData = {
                   user_id: user.id,
                   hotel_id: hotel.hotel_id || id,
                   hotel_name: hotel.hotel_name,
-                  hotel_address: hotel.address,
+                  hotel_address: `${hotel.address}${country ? `, ${country}` : ""}`,
                   check_in_date: check_in,
                   check_out_date: check_out,
                   num_adults: adults,
@@ -492,7 +559,13 @@ const HotelDetail = () => {
                   num_rooms: room_qty,
                   total_price: parseFloat(calculateTotalPrice()),
                   currency,
-                  hotel_image_url: photos?.[0]?.url || null
+                  hotel_image_url: photos?.[0]?.url || null,
+                  activities: selectedAttractions.map((a) => ({
+                    name: a.name,
+                    price: a.representativePrice?.publicAmount,
+                    image: a.primaryPhoto?.small,
+                    slug: a.slug
+                  }))
                 };
 
                 localStorage.setItem("pendingBooking", JSON.stringify(bookingData));
@@ -503,13 +576,182 @@ const HotelDetail = () => {
               Continue to Payment
             </button>
 
+            {showAttractionModal && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+              <div className="bg-white p-6 rounded-lg shadow-lg max-w-3xl w-full relative">
+                <button
+                  className="absolute top-2 right-2 text-gray-600 hover:text-black text-xl"
+                  onClick={() => setShowAttractionModal(false)}
+                >
+                  ✖
+                </button>
+                <h2 className="text-2xl font-semibold mb-4">Select Activities</h2>
+
+                <div className="grid grid-cols-2 gap-4 max-h-[60vh] overflow-y-auto">
+                  {attractions.map((attr, index) => (
+                    <div
+                      key={index}
+                      className={`relative border p-4 rounded-lg cursor-pointer transition ${
+                        selectedAttractions.includes(attr) ? "border-green-600 bg-green-50" : "border-gray-300"
+                      }`}
+                      onClick={() => {
+                        setSelectedAttractions((prev) =>
+                          prev.includes(attr)
+                            ? prev.filter((a) => a !== attr)
+                            : [...prev, attr]
+                        );
+                      }}
+                    >
+                      <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleAttractionInfoClick(attr.slug);
+                      }}
+                      className="absolute top-2 right-2 text-blue-600 hover:text-blue-800"
+                      title="More Info"
+                    >
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        className="h-6 w-6"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        strokeWidth={2}
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M12 2a10 10 0 110 20 10 10 0 010-20z" />
+                      </svg>
+                    </button>
+                      <h3 className="font-semibold text-lg">{attr.name}</h3>
+                      <p className="text-sm text-gray-600">{attr.shortDescription}</p>
+                      {attr.primaryPhoto?.small && (
+                        <img
+                          src={attr.primaryPhoto.small}
+                          alt={attr.name}
+                          className="w-full h-32 object-cover rounded mt-2"
+                        />
+                      )}
+                      <p className="text-green-700 font-semibold mt-2">
+                        {(attr.representativePrice?.publicAmount * exchangeRates[currency]).toFixed(2)} {currency}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+
+                <button
+                  className="w-full mt-6 bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg"
+                  onClick={() => {
+                    console.log("Selected attractions:", selectedAttractions);
+                    setShowAttractionModal(false);
+                    setShowAttractionSuccess(true);
+                  }}
+                >
+                  Save Selected Activities
+                </button>
+              </div>
+            </div>
+          )}
+
+            <button
+            className="w-full mt-4 bg-blue-500 hover:bg-blue-600 text-white py-2 rounded-lg"
+            onClick={() => setShowAttractionModal(true)}
+          >
+            Add Activities to Your Booking
+          </button>
 
           </div>
-
+          
         </div>
       )}
       {showPopup && <SuccessPopup onClose={() => setShowPopup(false)} />}
 
+      {showAttractionSuccess && (
+        <SuccessPopup
+          onClose={() => setShowAttractionSuccess(false)}
+          message="Activities added to your booking"
+        />
+      )}
+      {showInfoModal && infoAttraction && (
+      <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+        <div className="bg-white p-6 rounded-lg max-w-xl w-full relative max-h-[90vh] overflow-y-auto">
+          <button
+            className="absolute top-2 right-2 text-gray-500 hover:text-black text-2xl"
+            onClick={() => setShowInfoModal(false)}
+          >
+            ✖
+          </button>
+          <h2 className="text-xl font-bold mb-2">{infoAttraction.name}</h2>
+          <p className="text-sm text-gray-700 whitespace-pre-line mb-4">
+            {infoAttraction.description}
+          </p>
+          {infoAttraction.additionalInfo && (
+            <p className="text-sm text-gray-600 italic whitespace-pre-line mb-4">
+              {infoAttraction.additionalInfo}
+            </p>
+          )}
+          <div className="flex gap-2 mt-4 overflow-x-auto">
+            {infoAttraction.photos?.slice(0, 5).map((photo, i) => (
+              <img
+              key={i}
+              src={photo.small}
+              alt="Attraction"
+              className="w-24 h-24 object-cover rounded cursor-pointer"
+              onClick={() => {
+                setSelectedAttractionIndex(i);
+                setShowAttractionGallery(true);
+              }}
+            />
+            ))}
+          </div>
+        </div>
+      </div>
+    )}
+    {showAttractionGallery && infoAttraction?.photos?.length > 0 && (
+        <div className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50">
+          <div className="relative w-full max-w-4xl">
+            <button
+              className="absolute top-2 right-2 text-white text-3xl font-bold"
+              onClick={() => setShowAttractionGallery(false)}
+            >
+              ✖
+            </button>
+
+            {selectedAttractionIndex > 0 && (
+                <button
+                  className="absolute left-2 top-1/2 transform -translate-y-1/2 text-white text-3xl"
+                  onClick={() => setSelectedAttractionIndex((prev) => prev - 1)}
+                >
+                  ◀
+                </button>
+              )}
+              {selectedAttractionIndex < infoAttraction.photos.length - 1 && (
+                <button
+                  className="absolute right-2 top-1/2 transform -translate-y-1/2 text-white text-3xl"
+                  onClick={() => setSelectedAttractionIndex((prev) => prev + 1)}
+                >
+                  ▶
+                </button>
+              )}
+
+              <img
+                src={infoAttraction.photos[selectedAttractionIndex]?.medium || infoAttraction.photos[selectedAttractionIndex]?.small}
+                alt={`Attraction ${selectedAttractionIndex}`}
+                className="w-full h-auto max-h-[80vh] mx-auto rounded-lg"
+              />
+
+              <div className="flex overflow-x-auto mt-4 space-x-2 p-2 bg-black bg-opacity-50 rounded-lg">
+                {infoAttraction.photos.map((photo, index) => (
+                  <img
+                    key={index}
+                    src={photo.small}
+                    alt={`Thumbnail ${index}`}
+                    className={`w-20 h-20 object-cover rounded cursor-pointer ${index === selectedAttractionIndex ? "border-4 border-white" : ""}`}
+                    onClick={() => setSelectedAttractionIndex(index)}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
 
     </>
   );

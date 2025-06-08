@@ -38,6 +38,91 @@ app.post("/register", (req, res) => {
   });
 });
 
+const SibApiV3Sdk = require('sib-api-v3-sdk');
+
+
+app.post("/api/send-confirmation-email", async (req, res) => {
+  const { to_email, to_name, total_price, currency, hotel, attractions } = req.body;
+
+  if (!to_email || !to_name || !hotel || !total_price || !currency) {
+    return res.status(400).json({ error: "Missing required booking data" });
+  }
+
+  const defaultClient = SibApiV3Sdk.ApiClient.instance;
+  defaultClient.authentications['api-key'].apiKey = process.env.BREVO_API_KEY;
+
+  const apiInstance = new SibApiV3Sdk.TransactionalEmailsApi();
+
+  const totalAttractionsPrice = attractions?.reduce((sum, a) => sum + Number(a.price || 0), 0) || 0;
+  const grandTotal = (parseFloat(total_price) + totalAttractionsPrice).toFixed(2);
+
+  const hotelHtml = `
+    <div style="padding: 10px; border: 1px solid #ccc; border-radius: 10px; margin-bottom: 20px;">
+      <h2 style="margin-bottom: 5px;">${hotel.name}</h2>
+      <img src="${hotel.image || hotel.image_url}" alt="Hotel Image" width="300" style="border-radius:8px;" />
+      <p><strong>Address:</strong> ${hotel.address}</p>
+      <p><strong>Check-in:</strong> ${hotel.check_in}</p>
+      <p><strong>Check-out:</strong> ${hotel.check_out}</p>
+      <p><strong>Rooms:</strong> ${hotel.rooms}, Adults: ${hotel.adults}, Children: ${hotel.children}</p>
+      <p><strong>Hotel Price:</strong> ${parseFloat(total_price).toFixed(2)} ${currency}</p>
+    </div>
+  `;
+
+  const attractionsHtml = attractions?.length
+    ? `<h3 style="margin-bottom:10px;">Booked Attractions:</h3>` +
+        attractions.map(a => `
+          <div style="display:flex; align-items:center; margin-bottom:14px; gap:10px;">
+            <img src="${a.image || a.image_url}" alt="Attraction" width="80" style="border-radius:6px;" />
+            <div>
+              <p style="margin:0;"><strong>${a.name}</strong></p>
+              <p style="margin:0;">${Number(a.price).toFixed(2)} ${currency}</p>
+            </div>
+          </div>
+        `).join("")
+    : "<p>No attractions booked.</p>";
+
+  const htmlContent = `
+    <html>
+      <body style="font-family:sans-serif; padding:20px; color:#333;">
+        <h1 style="color:#007B77;">Hello ${to_name},</h1>
+        <p style="font-size:16px;">Thank you for your reservation! Here are your booking details:</p>
+        ${hotelHtml}
+        ${attractionsHtml}
+        <hr style="margin: 30px 0;"/>
+        <p style="font-size:18px;"><strong>Total Amount:</strong> ${grandTotal} ${currency}</p>
+        <p style="font-size:16px;">We wish you a pleasant trip!<br/>The ReservRoom Team</p>
+      </body>
+    </html>
+  `;
+
+  try {
+    const smtpEmail = {
+      to: [{
+        email: to_email,
+        name: to_name
+      }],
+      sender: {
+        name: "ReservRoom Team",
+        email: "otto.kovacs1109@gmail.com"
+      },
+      subject: "Reservation Confirmation",
+      htmlContent: htmlContent
+    };
+
+    const data = await apiInstance.sendTransacEmail(smtpEmail);
+    console.log(" Brevo email sent successfully:", data);
+    res.json({ success: true, data });
+  } catch (error) {
+    console.error(" Brevo SDK error:", {
+      status: error?.response?.status,
+      data: error?.response?.data,
+      message: error.message
+    });
+    res.status(500).json({ success: false, message: "Failed to send confirmation email" });
+  }
+});
+
+
 app.post("/login", (req, res) => {
   const { email, password } = req.body;
 
@@ -120,6 +205,37 @@ app.post("/api/favorites", (req, res) => {
   });
 });
 
+app.post("/api/booking-attractions", (req, res) => {
+  const { booking_id, attractions } = req.body;
+
+  if (!booking_id || !Array.isArray(attractions)) {
+    return res.status(400).json({ error: "Invalid request body" });
+  }
+
+  const values = attractions.map(a => [
+    booking_id,
+    a.name,
+    a.description || "",
+    a.price || 0,
+    a.currency || "EUR",
+    a.image_url || null,
+    a.slug || null 
+  ]);
+
+  const sql = `
+    INSERT INTO booking_attractions
+    (booking_id, attraction_name, attraction_description, price, currency, image_url, slug)
+    VALUES ?
+  `;
+
+  db.query(sql, [values], (err, result) => {
+    if (err) {
+      console.error("Error inserting attractions:", err);
+      return res.status(500).json({ error: "Database error" });
+    }
+    res.json({ success: true, inserted: result.affectedRows });
+  });
+});
 
 app.get("/api/search", async (req, res) => {
   const { query } = req.query;
@@ -330,13 +446,41 @@ app.get('/api/attractions/by-city', async (req, res) => {
       }
     });
 
-    const products = attractionRes.data.data?.products || [];
-    res.json({ success: true, data: products });
+    const baseProducts = attractionRes.data.data?.products || [];
+
+    const enrichedProducts = await Promise.all(
+      baseProducts.slice(0, 10).map(async (product) => {
+        try {
+          const detailRes = await axios.get('https://booking-com15.p.rapidapi.com/api/v1/attraction/getAttractionDetails', {
+            params: {
+              slug: product.slug,
+              currency_code: 'EUR'
+            },
+            headers: {
+              'x-rapidapi-key': process.env.RAPIDAPI_KEY,
+              'x-rapidapi-host': 'booking-com15.p.rapidapi.com'
+            }
+          });
+          console.log("API response full:", response.data);
+
+          return {
+            ...product,
+            ...detailRes.data.data,
+            slug: detailRes.data.data?.slug || product.slug 
+          };
+        } catch (err) {
+          return product; 
+        }
+      })
+    );
+
+    res.json({ success: true, data: enrichedProducts });
   } catch (error) {
     console.error("Attraction Fetch Error:", error);
     res.status(500).json({ success: false, message: "Failed to fetch attractions." });
   }
 });
+
 
 app.get("/api/bookings/:userId", (req, res) => {
   const userId = req.params.userId;
@@ -471,6 +615,82 @@ app.get("/api/hotels/reviews/:id", async (req, res) => {
     console.error("Error fetching hotel reviews:", error);
     res.status(500).json({ success: false, message: "Failed to fetch reviews." });
   }
+});
+app.get("/api/attractions/details", async (req, res) => {
+  const { slug, currency_code = "USD" } = req.query;
+  if (!slug) return res.status(400).json({ error: "Missing slug" });
+
+  try {
+    const response = await axios.get(
+      "https://booking-com15.p.rapidapi.com/api/v1/attraction/getAttractionDetails",
+      {
+        params: { slug, currency_code },
+        headers: {
+          "x-rapidapi-host": "booking-com15.p.rapidapi.com",
+          "x-rapidapi-key": process.env.RAPIDAPI_KEY,
+        },
+      }
+    );
+    res.json({ data: response.data.data });
+  } catch (err) {
+    console.error("Attraction details fetch failed:", err);
+    res.status(500).json({ error: "Failed to fetch details" });
+  }
+});
+
+app.get("/api/booking-attractions/:bookingId", (req, res) => {
+  const bookingId = req.params.bookingId;
+  const sql = "SELECT * FROM booking_attractions WHERE booking_id = ?";
+
+  db.query(sql, [bookingId], (err, results) => {
+    if (err) return res.status(500).json({ error: "Database error" });
+    res.json(results);
+  });
+});
+app.get("/api/recommendations/:userId", async (req, res) => {
+  const { userId } = req.params;
+
+  const recentBookingSql = `
+    SELECT hotel_address, hotel_id
+    FROM bookings
+    WHERE user_id = ?
+    ORDER BY created_at DESC
+    LIMIT 1
+  `;
+
+  db.query(recentBookingSql, [userId], async (err, results) => {
+    if (err || results.length === 0) return res.json([]);
+
+    const lastAddress = results[0].hotel_address;
+    const parts = lastAddress.split(",");
+    const country = parts.length > 1 ? parts[parts.length - 1].trim() : null;
+    if (!country) return res.json([]);
+
+    try {
+      const searchRes = await axios.get("http://localhost:5000/api/search", { params: { query: country } });
+      const dest = Array.isArray(searchRes.data)
+        ? searchRes.data.find(d => d.name.toLowerCase().includes(country.toLowerCase())) || searchRes.data[0]
+        : null;
+      if (!dest?.id) return res.json([]);
+
+      const hotelRes = await axios.get("http://localhost:5000/api/hotels", {
+        params: {
+          dest_id: dest.id,
+          check_in: new Date().toISOString().slice(0, 10),
+          check_out: new Date(Date.now() + 86400000).toISOString().slice(0, 10),
+          adults: 2,
+          room_qty: 1,
+          page_number: 1
+        }
+      });
+
+      const hotels = hotelRes.data?.data?.hotels || [];
+      res.json(hotels.slice(0, 6)); 
+    } catch (e) {
+      console.error("Recommendation error:", e);
+      res.status(500).json({ error: "Recommendation failed" });
+    }
+  });
 });
 
 app.listen(5000, () => {

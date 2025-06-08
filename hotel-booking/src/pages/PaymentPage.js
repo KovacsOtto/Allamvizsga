@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
+import SuccessPopup from "../components/SuccessPopup";
 
 const PaymentPage = () => {
   const navigate = useNavigate();
@@ -10,6 +11,7 @@ const PaymentPage = () => {
   const [cvc, setCvc] = useState("");
   const [cardName, setCardName] = useState("");
   const [currency, setCurrency] = useState(localStorage.getItem("currency") || "EUR");
+  const [showSuccessPopup, setShowSuccessPopup] = useState(false);
 
   useEffect(() => {
     const stored = localStorage.getItem("pendingBooking");
@@ -44,31 +46,83 @@ const PaymentPage = () => {
 
 if (!booking) return null;
    
-  const handlePayment = async () => {
-    if (!cardNumber || !expiry || !cvc) {
-      alert("Please fill in all payment details.");
-      return;
-    }
+const handlePayment = async () => {
+  const user = JSON.parse(localStorage.getItem("user"));
 
-    try {
-      const res = await fetch("http://localhost:5000/api/bookings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(booking),
-      });
+  if (!cardNumber || !expiry || !cvc) {
+    alert("Please fill in all payment details.");
+    return;
+  }
 
-      if (res.ok) {
-        alert("Payment successful!");
-        localStorage.removeItem("pendingBooking");
-        navigate("/");
-      } else {
-        alert("Payment failed. Try again.");
+  try {
+    const res = await fetch("http://localhost:5000/api/bookings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(booking),
+    });
+
+    const result = await res.json();
+
+    if (res.ok && result.booking_id) {
+      const bookingId = result.booking_id;
+
+      if (booking.activities && booking.activities.length > 0) {
+        await fetch("http://localhost:5000/api/booking-attractions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            booking_id: bookingId,
+            attractions: booking.activities.map((a) => ({
+              name: a.name,
+              description: a.shortDescription || "",  
+              price: a.price || 0,
+              currency: booking.currency,
+              image_url: a.image || a.image_url || null,
+              slug: a.slug || null
+
+            }))
+          }),
+        });
       }
-    } catch (err) {
-      console.error("Payment error:", err);
-      alert("Payment error occurred.");
+
+      setShowSuccessPopup(true);
+      await fetch("http://localhost:5000/api/send-confirmation-email", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        to_email: user.email,
+        to_name: user.full_name,
+        total_price: booking.total_price.toFixed(2),
+        currency: booking.currency,
+        hotel: {
+          name: booking.hotel_name,
+          address: booking.hotel_address,
+          image: booking.hotel_image_url || booking.hotel_image || null,
+          check_in: booking.check_in_date,
+          check_out: booking.check_out_date,
+          rooms: booking.num_rooms,
+          adults: booking.num_adults,
+          children: booking.num_children
+        },
+        attractions: booking.activities || []
+      }),
+    });
+
+      setTimeout(() => {
+        localStorage.removeItem("pendingBooking");
+        navigate("/Profile");
+      }, 2000);
+
+    } else {
+      alert("Booking failed. Try again.");
     }
-  };
+
+  } catch (err) {
+    console.error("Payment error:", err);
+    alert("Payment error occurred.");
+  }
+};
+
 
   if (!booking) return null;
 
@@ -137,6 +191,9 @@ if (!booking) return null;
           </button>
         </div>
       </div>
+      {showSuccessPopup && <SuccessPopup onClose={() => setShowSuccessPopup(false)}
+                 message="Reservation Successful"/>}
+
     </>
   );
 };

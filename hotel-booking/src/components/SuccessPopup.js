@@ -1,7 +1,7 @@
 import React, { useEffect } from "react";
 import "./SuccessPopup.css";
 
-const SuccessPopup = ({ onClose }) => {
+const SuccessPopup = ({ onClose,  message  }) => {
     useEffect(() => {
         const timer = setTimeout(onClose, 2000);
         return () => clearTimeout(timer);
@@ -24,7 +24,7 @@ const SuccessPopup = ({ onClose }) => {
             d="M5 13l4 4L19 7"
           />
         </svg>
-        <p className="text-green-600 font-bold text-lg">Reservation successful!</p>
+        <p className="text-green-600 font-bold text-lg">{message}</p>
       </div>
     </div>
   );
