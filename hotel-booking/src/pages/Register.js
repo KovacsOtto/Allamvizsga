@@ -16,7 +16,7 @@ const Register = () => {
     setError("");
     setSuccess("");
     try {
-      const res = await axios.post("http://localhost:5000/register", user);
+      const res = await axios.post("https://backend-519v.onrender.com/register", user);
       setSuccess("Account created successfully! Redirecting...");
       setTimeout(() => navigate("/auth"), 2000);
     } catch (err) {

@@ -39,7 +39,7 @@ const Dashboard = ({ currency, setCurrency }) => {
   useEffect(() => {
     const user = JSON.parse(localStorage.getItem("user"));
     if (!hasSearched && user?.id) {
-      axios.get(`http://localhost:5000/api/recommendations/${user.id}`)
+      axios.get(`https://backend-519v.onrender.com/api/recommendations/${user.id}`)
         .then((res) => {
           console.log("Received recommendations:", res.data); 
           setRecommendedHotels(res.data.filter(h => h?.property?.id));
@@ -89,7 +89,7 @@ const Dashboard = ({ currency, setCurrency }) => {
         const check_in = format(new Date(dates[0].startDate), "yyyy-MM-dd");
         const check_out = format(new Date(dates[0].endDate), "yyyy-MM-dd");
 
-        const res = await axios.get("http://localhost:5000/api/hotels/filters", {
+        const res = await axios.get("https://backend-519v.onrender.com/api/hotels/filters", {
           params: {
             dest_id: destId,
             search_type: "CITY",
@@ -122,7 +122,7 @@ const Dashboard = ({ currency, setCurrency }) => {
   
     while (true) {
       try {
-        const res = await axios.get("http://localhost:5000/api/hotels", {
+        const res = await axios.get("https://backend-519v.onrender.com/api/hotels", {
           params: {
             dest_id: destId,
             check_in,
@@ -140,7 +140,7 @@ const Dashboard = ({ currency, setCurrency }) => {
         const hotelIds = batch.map(h => h?.property?.id).filter(Boolean);
         if (hotelIds.length === 0) break;
   
-        const availabilityRes = await axios.get("http://localhost:5000/api/hotels/available", {
+        const availabilityRes = await axios.get("https://backend-519v.onrender.com/api/hotels/available", {
           params: { hotelIds: hotelIds.join(","), check_in, check_out },
         });
   
@@ -171,7 +171,7 @@ const Dashboard = ({ currency, setCurrency }) => {
       return;
     }
     try {
-      const res = await axios.get(`http://localhost:5000/api/search?query=${value}`);
+      const res = await axios.get(`https://backend-519v.onrender.com/api/search?query=${value}`);
       setSuggestions(res.data);
     } catch (err) {
       console.error("Failed to fetch destinations");
@@ -255,7 +255,7 @@ const Dashboard = ({ currency, setCurrency }) => {
       let currentPage = 1;
       const maxPages = 20;
       while (collectedHotels.length < page * 10&& currentPage <= maxPages) {
-        const res = await axios.get("http://localhost:5000/api/hotels", {
+        const res = await axios.get("https://backend-519v.onrender.com/api/hotels", {
           params: {
             dest_id: destId,
             check_in,
@@ -275,7 +275,7 @@ const Dashboard = ({ currency, setCurrency }) => {
         const hotelIds = hotelsBatch.map(h => h?.property?.id).filter(Boolean);
         if (hotelIds.length === 0) break;
 
-        const availabilityRes = await axios.get("http://localhost:5000/api/hotels/available", {
+        const availabilityRes = await axios.get("https://backend-519v.onrender.com/api/hotels/available", {
           params: { hotelIds: hotelIds.join(","), check_in, check_out },
         });
 

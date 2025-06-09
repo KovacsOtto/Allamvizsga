@@ -55,7 +55,7 @@ const handlePayment = async () => {
   }
 
   try {
-    const res = await fetch("http://localhost:5000/api/bookings", {
+    const res = await fetch("https://backend-519v.onrender.com/api/bookings", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(booking),
@@ -67,7 +67,7 @@ const handlePayment = async () => {
       const bookingId = result.booking_id;
 
       if (booking.activities && booking.activities.length > 0) {
-        await fetch("http://localhost:5000/api/booking-attractions", {
+        await fetch("https://backend-519v.onrender.com/api/booking-attractions", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -86,7 +86,7 @@ const handlePayment = async () => {
       }
 
       setShowSuccessPopup(true);
-      await fetch("http://localhost:5000/api/send-confirmation-email", {
+      await fetch("https://backend-519v.onrender.com/api/send-confirmation-email", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

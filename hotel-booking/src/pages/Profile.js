@@ -25,7 +25,7 @@ const Profile = ({ currency, setCurrency }) => {
 
   useEffect(() => {
     if (activeTab === "bookings" && user?.id) {
-      axios.get(`http://localhost:5000/api/bookings/${user.id}`)
+      axios.get(`https://backend-519v.onrender.com/api/bookings/${user.id}`)
         .then(res => setBookings(res.data))
         .catch(err => console.error("Failed to fetch bookings", err));
     }
@@ -34,7 +34,7 @@ const Profile = ({ currency, setCurrency }) => {
   useEffect(() => {
     if (activeTab === "favorites" && user?.id) {
       axios
-        .get(`http://localhost:5000/api/favorites/${user.id}`)
+        .get(`https://backend-519v.onrender.com/api/favorites/${user.id}`)
         .then((res) => {
           setFavorites(res.data);
         })
@@ -219,7 +219,7 @@ const Profile = ({ currency, setCurrency }) => {
     }
   
     try {
-      const res = await axios.get(`http://localhost:5000/api/booking-attractions/${bookingId}`);
+      const res = await axios.get(`https://backend-519v.onrender.com/api/booking-attractions/${bookingId}`);
       setAttractionsMap((prev) => ({ ...prev, [bookingId]: res.data }));
       setExpandedBookingId(bookingId);
     } catch (err) {
@@ -229,7 +229,7 @@ const Profile = ({ currency, setCurrency }) => {
   const handleAttractionInfoClick = async (slug) => {
     try {
       const currencyCode = currency === "LEI" ? "RON" : currency;
-      const res = await axios.get("http://localhost:5000/api/attractions/details", {
+      const res = await axios.get("https://backend-519v.onrender.com/api/attractions/details", {
         params: { slug, currency_code: currencyCode }
       });
       if (res.data?.data) {

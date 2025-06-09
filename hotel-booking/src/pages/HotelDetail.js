@@ -78,7 +78,7 @@ const HotelDetail = () => {
 
     const fetchHotelDetails = async () => {
       try {
-        const res = await axios.get(`http://localhost:5000/api/hotels/details/${id}`, {
+        const res = await axios.get(`https://backend-519v.onrender.com/api/hotels/details/${id}`, {
           params: { check_in, check_out, adults, children, room_qty },
         });
 
@@ -95,7 +95,7 @@ const HotelDetail = () => {
     
     const fetchHotelPhotos = async () => {
       try {
-        const res = await axios.get(`http://localhost:5000/api/hotels/photos/${id}`);
+        const res = await axios.get(`https://backend-519v.onrender.com/api/hotels/photos/${id}`);
         if (res.data.status && res.data.data.length > 0) {
           setPhotos(res.data.data);
         } else {
@@ -108,7 +108,7 @@ const HotelDetail = () => {
     };
     const fetchHotelDescription = async () => {
       try {
-        const response = await axios.get(`http://localhost:5000/api/hotels/description/${id}`);
+        const response = await axios.get(`https://backend-519v.onrender.com/api/hotels/description/${id}`);
         console.log("Description Response:", response.data);
         if (response.data.success) {
           setHotelDescription(response.data.description);
@@ -133,7 +133,7 @@ const HotelDetail = () => {
       const cityQuery = rawCity.split(":")[0];
       console.log("Város a lekéréshez:", cityQuery);
   
-      axios.get("http://localhost:5000/api/attractions/by-city", {
+      axios.get("https://backend-519v.onrender.com/api/attractions/by-city", {
         params: { city: cityQuery }
       })
         .then(res => {
@@ -148,7 +148,7 @@ const HotelDetail = () => {
       if (!user || !user.id) return alert("Please log in to save favorites.");
     
       try {
-        await axios.post("http://localhost:5000/api/favorites", {
+        await axios.post("https://backend-519v.onrender.com/api/favorites", {
           user_id: user.id,
           hotel_id: id,
           hotel_name: hotel.hotel_name,
@@ -169,7 +169,7 @@ const HotelDetail = () => {
     if (!user?.id || !hotel?.hotel_id) return;
   
     axios
-      .get(`http://localhost:5000/api/favorites/${user.id}`)
+      .get(`https://backend-519v.onrender.com/api/favorites/${user.id}`)
       .then((res) => {
         const isFav = res.data.some((fav) => fav.hotel_id == hotel.hotel_id);
         setIsFavorite(isFav);
@@ -213,7 +213,7 @@ const HotelDetail = () => {
   const handleAttractionInfoClick = async (slug) => {
     try {
       const currencyCode = currency === "LEI" ? "RON" : currency;
-      const res = await axios.get("http://localhost:5000/api/attractions/details", {
+      const res = await axios.get("https://backend-519v.onrender.com/api/attractions/details", {
         params: {
           slug,
           currency_code: currencyCode
@@ -303,10 +303,10 @@ const HotelDetail = () => {
             
               try {
                 if (isFavorite) {
-                  await axios.delete(`http://localhost:5000/api/favorites/${user.id}/${id}`);
+                  await axios.delete(`https://backend-519v.onrender.com/api/favorites/${user.id}/${id}`);
                   setIsFavorite(false);
                 } else {
-                  await axios.post("http://localhost:5000/api/favorites", {
+                  await axios.post("https://backend-519v.onrender.com/api/favorites", {
                     user_id: user.id,
                     hotel_id: id,
                     hotel_name: hotel.hotel_name,

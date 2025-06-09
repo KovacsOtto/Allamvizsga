@@ -15,7 +15,7 @@ const Auth = () => {
     e.preventDefault();
     setError("");
     try {
-      const res = await axios.post("http://localhost:5000/login", credentials);
+      const res = await axios.post("https://backend-519v.onrender.com/login", credentials);
       localStorage.setItem("token", res.data.token);
 
       localStorage.setItem("user", JSON.stringify({
