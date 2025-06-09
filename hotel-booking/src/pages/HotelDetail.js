@@ -124,7 +124,7 @@ const HotelDetail = () => {
     fetchHotelDetails();
     fetchHotelPhotos();
     fetchHotelDescription();
-  }, [id, check_in, check_out, adults, children, room_qty]);
+  }, [id, check_in, check_out, adults, children, room_qty, currency]);
 
 
   useEffect(() => {
