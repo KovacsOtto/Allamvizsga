@@ -5,11 +5,34 @@ const cors = require("cors");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const axios = require("axios");
+const { Pool } = require('pg');
 
 const app = express();
 app.use(express.json());
 app.use(cors());
 
+const pool = new Pool({
+  host: process.env.PGHOST,
+  port: process.env.PGPORT,
+  database: process.env.PGDATABASE,
+  user: process.env.PGUSER,
+  password: process.env.PGPASSWORD,
+  ssl: {
+    rejectUnauthorized: false
+  }
+});
+
+module.exports = pool;
+
+pool.connect((err, client, release) => {
+  if (err) {
+    console.error(" Failed to connect to PostgreSQL:", err.stack);
+  } else {
+    console.log(" Connected to PostgreSQL database successfully");
+    release();
+  }
+});
+/*
 const db = mysql.createConnection({
     host: "127.0.0.1",
     user: "root",
@@ -23,7 +46,8 @@ db.connect((err) => {
     console.log(" Connected to MySQL Database");
   }
 });
-
+*/
+/*
 app.post("/register", (req, res) => {
   const { full_name, email, password } = req.body;
 
@@ -37,6 +61,23 @@ app.post("/register", (req, res) => {
     });
   });
 });
+*/
+app.post("/register", async (req, res) => {
+  const { full_name, email, password } = req.body;
+
+  try {
+    const hash = await bcrypt.hash(password, 10);
+
+    const sql = "INSERT INTO users (full_name, email, password_hash) VALUES ($1, $2, $3)";
+    await pool.query(sql, [full_name, email, hash]);
+
+    res.status(201).json({ message: "User registered successfully!" });
+  } catch (err) {
+    console.error("Registration error:", err);
+    res.status(500).json({ error: "User already exists or database error" });
+  }
+});
+
 
 const SibApiV3Sdk = require('sib-api-v3-sdk');
 
@@ -122,7 +163,7 @@ app.post("/api/send-confirmation-email", async (req, res) => {
   }
 });
 
-
+/*
 app.post("/login", (req, res) => {
   const { email, password } = req.body;
 
@@ -151,7 +192,48 @@ app.post("/login", (req, res) => {
     });
   });
 });
+*/
+app.post("/login", async (req, res) => {
+  const { email, password } = req.body;
 
+  const sql = "SELECT * FROM users WHERE email = $1";
+
+  try {
+    const result = await pool.query(sql, [email]);
+
+    if (result.rows.length === 0) {
+      return res.status(401).json({ message: "User not found" });
+    }
+
+    const user = result.rows[0];
+
+    const isMatch = await bcrypt.compare(password, user.password_hash);
+
+    if (!isMatch) {
+      return res.status(401).json({ message: "Invalid credentials" });
+    }
+
+    const token = jwt.sign(
+      { userId: user.id, full_name: user.full_name },
+      "secret_key",
+      { expiresIn: "1h" }
+    );
+
+    res.json({
+      message: "Login successful",
+      token,
+      id: user.id,
+      full_name: user.full_name,
+      email: user.email,
+      created_at: user.created_at
+    });
+
+  } catch (err) {
+    console.error("Login error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+/*
 app.post("/api/bookings", (req, res) => {
   const {
     user_id,
@@ -190,7 +272,48 @@ app.post("/api/bookings", (req, res) => {
     res.json({ message: "Booking successful", booking_id: result.insertId });
   });
 });
+*/
+app.post("/api/bookings", async (req, res) => {
+  const {
+    user_id,
+    hotel_id,
+    hotel_name,
+    hotel_address,
+    check_in_date,
+    check_out_date,
+    num_adults,
+    num_children,
+    num_rooms,
+    total_price,
+    currency,
+    hotel_image_url
+  } = req.body;
 
+  const sql = `
+    INSERT INTO bookings (
+      user_id, hotel_id, hotel_name, hotel_address,
+      check_in_date, check_out_date, num_adults, num_children,
+      num_rooms, total_price, currency, hotel_image_url
+    )
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+    RETURNING id
+  `;
+
+  try {
+    const result = await pool.query(sql, [
+      user_id, hotel_id, hotel_name, hotel_address,
+      check_in_date, check_out_date, num_adults, num_children,
+      num_rooms, total_price, currency, hotel_image_url
+    ]);
+
+    res.json({ message: "Booking successful", booking_id: result.rows[0].id });
+  } catch (err) {
+    console.error("Booking insert failed:", err);
+    res.status(500).json({ error: "Booking failed" });
+  }
+});
+
+/*
 app.post("/api/favorites", (req, res) => {
   const { user_id, hotel_id, hotel_name, hotel_address, hotel_image_url } = req.body;
 
@@ -204,7 +327,25 @@ app.post("/api/favorites", (req, res) => {
     res.json({ message: "Favorite saved" });
   });
 });
+*/
+app.post("/api/favorites", async (req, res) => {
+  const { user_id, hotel_id, hotel_name, hotel_address, hotel_image_url } = req.body;
 
+  const sql = `
+    INSERT INTO favorites (user_id, hotel_id, hotel_name, hotel_address, hotel_image_url)
+    VALUES ($1, $2, $3, $4, $5)
+  `;
+
+  try {
+    await pool.query(sql, [user_id, hotel_id, hotel_name, hotel_address, hotel_image_url]);
+    res.json({ message: "Favorite saved" });
+  } catch (err) {
+    console.error("Database error:", err);
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
+/*
 app.post("/api/booking-attractions", (req, res) => {
   const { booking_id, attractions } = req.body;
 
@@ -236,7 +377,43 @@ app.post("/api/booking-attractions", (req, res) => {
     res.json({ success: true, inserted: result.affectedRows });
   });
 });
+*/
+app.post("/api/booking-attractions", async (req, res) => {
+  const { booking_id, attractions } = req.body;
 
+  if (!booking_id || !Array.isArray(attractions)) {
+    return res.status(400).json({ error: "Invalid request body" });
+  }
+
+  const values = attractions.map((a, index) => 
+    `($1, $${index * 6 + 2}, $${index * 6 + 3}, $${index * 6 + 4}, $${index * 6 + 5}, $${index * 6 + 6}, $${index * 6 + 7})`
+  ).join(", ");
+
+  const params = attractions.flatMap(a => [
+    a.name,
+    a.description || "",
+    a.price || 0,
+    a.currency || "EUR",
+    a.image_url || null,
+    a.slug || null
+  ]);
+
+  const fullParams = [booking_id, ...params];
+
+  const sql = `
+    INSERT INTO booking_attractions
+    (booking_id, attraction_name, attraction_description, price, currency, image_url, slug)
+    VALUES ${values}
+  `;
+
+  try {
+    await pool.query(sql, fullParams);
+    res.json({ success: true, inserted: attractions.length });
+  } catch (err) {
+    console.error("Error inserting attractions:", err);
+    res.status(500).json({ error: "Database error" });
+  }
+});
 app.get("/api/search", async (req, res) => {
   const { query } = req.query;
 
@@ -264,6 +441,7 @@ app.get("/api/search", async (req, res) => {
     res.status(500).json({ error: "Failed to fetch destination data" });
   }
 });
+
 
 app.get("/api/hotels", async (req, res) => {
   const {
@@ -481,7 +659,7 @@ app.get('/api/attractions/by-city', async (req, res) => {
   }
 });
 
-
+/*
 app.get("/api/bookings/:userId", (req, res) => {
   const userId = req.params.userId;
 
@@ -496,7 +674,25 @@ app.get("/api/bookings/:userId", (req, res) => {
     res.json(results);
   });
 });
+*/
+app.get("/api/bookings/:userId", async (req, res) => {
+  const userId = req.params.userId;
 
+  const sql = `
+    SELECT * FROM bookings 
+    WHERE user_id = $1
+    ORDER BY check_in_date DESC
+  `;
+
+  try {
+    const result = await pool.query(sql, [userId]);
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Database error:", err);
+    res.status(500).json({ error: "Database error" });
+  }
+});
+/*
 app.get("/api/favorites/:userId", (req, res) => {
   const userId = req.params.userId;
 
@@ -506,7 +702,22 @@ app.get("/api/favorites/:userId", (req, res) => {
     res.json(results);
   });
 });
+*/
+app.get("/api/favorites/:userId", async (req, res) => {
+  const userId = req.params.userId;
 
+  const sql = "SELECT * FROM favorites WHERE user_id = $1";
+
+  try {
+    const result = await pool.query(sql, [userId]);
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Database error:", err);
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
+/*
 app.delete("/api/favorites/:userId/:hotelId", (req, res) => {
   const { userId, hotelId } = req.params;
 
@@ -515,6 +726,20 @@ app.delete("/api/favorites/:userId/:hotelId", (req, res) => {
     if (err) return res.status(500).json({ error: "Failed to delete favorite" });
     res.json({ success: true });
   });
+});
+*/
+app.delete("/api/favorites/:userId/:hotelId", async (req, res) => {
+  const { userId, hotelId } = req.params;
+
+  const sql = "DELETE FROM favorites WHERE user_id = $1 AND hotel_id = $2";
+
+  try {
+    await pool.query(sql, [userId, hotelId]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Failed to delete favorite:", err);
+    res.status(500).json({ error: "Failed to delete favorite" });
+  }
 });
 
 app.get('/api/hotels/available', async (req, res) => {
@@ -637,7 +862,7 @@ app.get("/api/attractions/details", async (req, res) => {
     res.status(500).json({ error: "Failed to fetch details" });
   }
 });
-
+/*
 app.get("/api/booking-attractions/:bookingId", (req, res) => {
   const bookingId = req.params.bookingId;
   const sql = "SELECT * FROM booking_attractions WHERE booking_id = ?";
@@ -647,9 +872,21 @@ app.get("/api/booking-attractions/:bookingId", (req, res) => {
     res.json(results);
   });
 });
+*/
+app.get("/api/booking-attractions/:bookingId", async (req, res) => {
+  const bookingId = req.params.bookingId;
+  const sql = "SELECT * FROM booking_attractions WHERE booking_id = $1";
 
+  try {
+    const result = await pool.query(sql, [bookingId]);
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Database error:", err);
+    res.status(500).json({ error: "Database error" });
+  }
+});
 
-
+/*
 app.get("/api/recommendations/:userId", async (req, res) => {
   const { userId } = req.params;
 
@@ -713,6 +950,69 @@ app.get("/api/recommendations/:userId", async (req, res) => {
       res.status(500).json({ error: "Recommendation failed" });
     }
   });
+});
+*/
+app.get("/api/recommendations/:userId", async (req, res) => {
+  const { userId } = req.params;
+
+  const recentBookingSql = `
+    SELECT hotel_address, hotel_id
+    FROM bookings
+    WHERE user_id = $1
+    ORDER BY created_at DESC
+    LIMIT 1
+  `;
+
+  try {
+    const result = await pool.query(recentBookingSql, [userId]);
+    if (result.rows.length === 0) return res.json([]);
+
+    const lastAddress = result.rows[0].hotel_address;
+    const parts = lastAddress.split(",");
+    const country = parts.length >= 1 ? parts[parts.length - 1].trim() : null;
+    if (!country) return res.json([]);
+
+    const searchRes = await axios.get("https://booking-com15.p.rapidapi.com/api/v1/hotels/searchDestination", {
+      params: { query: country },
+      headers: {
+        "x-rapidapi-key": process.env.RAPIDAPI_KEY,
+        "x-rapidapi-host": "booking-com15.p.rapidapi.com",
+      },
+    });
+
+    const candidates = Array.isArray(searchRes.data?.data) ? searchRes.data.data : [];
+
+    const dest = candidates.find(d =>
+      d.country?.toLowerCase() === country.toLowerCase() && d.search_type === "city"
+    ) || candidates.find(d =>
+      d.country?.toLowerCase() === country.toLowerCase()
+    );
+
+    if (!dest?.dest_id) return res.json([]);
+
+    const hotelRes = await axios.get("https://booking-com15.p.rapidapi.com/api/v1/hotels/searchHotels", {
+      params: {
+        dest_id: dest.dest_id,
+        search_type: "CITY",
+        arrival_date: new Date().toISOString().slice(0, 10),
+        departure_date: new Date(Date.now() + 86400000).toISOString().slice(0, 10),
+        adults: 2,
+        room_qty: 1,
+        page_number: 1
+      },
+      headers: {
+        "x-rapidapi-key": process.env.RAPIDAPI_KEY,
+        "x-rapidapi-host": "booking-com15.p.rapidapi.com",
+      }
+    });
+
+    const hotels = hotelRes.data?.data?.hotels || [];
+    res.json(hotels.slice(0, 6));
+
+  } catch (err) {
+    console.error("Recommendation error:", err?.response?.data || err.message);
+    res.status(500).json({ error: "Recommendation failed" });
+  }
 });
 
 app.listen(5000, () => {
