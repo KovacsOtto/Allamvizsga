@@ -201,9 +201,11 @@ const HotelDetail = () => {
   };
   const nights = Math.ceil((new Date(check_out) - new Date(check_in)) / (1000 * 60 * 60 * 24));
   const calculateTotalPrice = () => {
-    const base = hotel?.product_price_breakdown?.gross_amount?.value;
-    if (!base || isNaN(base)) return null;
-  
+    const base = Number(hotel?.product_price_breakdown?.gross_amount?.value);
+    if (!base || isNaN(base)) {
+      console.warn("❗ Nem sikerült kinyerni az árat:", hotel?.product_price_breakdown);
+      return null;
+    }
     const nights = Math.ceil((new Date(check_out) - new Date(check_in)) / (1000 * 60 * 60 * 24)) || 1;
     const hotelCost = base * room_qty * nights * exchangeRates[currency];
     const attractionCost = calculateAttractionTotal();
