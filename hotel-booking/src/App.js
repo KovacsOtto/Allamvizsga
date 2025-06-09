@@ -8,6 +8,7 @@ import Navbar from "./components/Navbar";
 import HotelDetail from "./pages/HotelDetail";
 import Profile from "./pages/Profile";
 import PaymentPage from "./pages/PaymentPage";
+import 'leaflet/dist/leaflet.css';
 
 
 const Layout = ({ children, currency, setCurrency }) => {

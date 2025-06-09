@@ -8,6 +8,7 @@ import "react-date-range/dist/theme/default.css";
 import { format } from "date-fns";
 import { enGB } from "date-fns/locale";
 import FilterSidebar from "../components/FilterSidebar";
+import HotelMap from "../components/MapView";
 
 const Dashboard = ({ currency, setCurrency }) => {
   const navigate = useNavigate();
@@ -31,6 +32,7 @@ const Dashboard = ({ currency, setCurrency }) => {
   const [activeFilters, setActiveFilters] = useState({});
   const [recommendedHotels, setRecommendedHotels] = useState([]);
   const [hasSearched, setHasSearched] = useState(false);
+  const [fullHotelList, setFullHotelList] = useState([]);
 
 
 
@@ -39,11 +41,13 @@ const Dashboard = ({ currency, setCurrency }) => {
     if (!hasSearched && user?.id) {
       axios.get(`http://localhost:5000/api/recommendations/${user.id}`)
         .then((res) => {
+          console.log("Received recommendations:", res.data); 
           setRecommendedHotels(res.data.filter(h => h?.property?.id));
         })
         .catch((err) => console.error("Failed to load recommendations", err));
     }
   }, [hasSearched]);
+  
   
   
   
@@ -107,6 +111,57 @@ const Dashboard = ({ currency, setCurrency }) => {
     fetchFilters();
   }, [destId, guests]);
   
+  const fetchAllHotelsForMap = async () => {
+    if (!destId) return [];
+  
+    const check_in = format(new Date(dates[0].startDate), "yyyy-MM-dd");
+    const check_out = format(new Date(dates[0].endDate), "yyyy-MM-dd");
+  
+    let collected = [];
+    let currentPage = 1;
+  
+    while (true) {
+      try {
+        const res = await axios.get("http://localhost:5000/api/hotels", {
+          params: {
+            dest_id: destId,
+            check_in,
+            check_out,
+            adults: guests.adults,
+            children: guests.children > 0 ? Array(guests.children).fill(5).join(",") : "",
+            room_qty: guests.rooms,
+            page_number: currentPage
+          }
+        });
+  
+        const batch = res.data?.data?.hotels || [];
+        if (batch.length === 0) break;
+  
+        const hotelIds = batch.map(h => h?.property?.id).filter(Boolean);
+        if (hotelIds.length === 0) break;
+  
+        const availabilityRes = await axios.get("http://localhost:5000/api/hotels/available", {
+          params: { hotelIds: hotelIds.join(","), check_in, check_out },
+        });
+  
+        const availableIds = availabilityRes.data.available || [];
+        const availableHotels = batch.filter(h => availableIds.includes(String(h.property.id)));
+  
+        collected.push(...availableHotels);
+  
+        const next = res.data?.data?.pagination?.next_page_number;
+        if (!next) break;
+  
+        currentPage = next;
+      } catch (err) {
+        console.error("Failed to fetch hotels for map", err);
+        break;
+      }
+    }
+  
+    console.log("Hotels collected for map:", collected.length);
+    return collected;
+  };
   
   
   const handleSearch = async (value) => {
@@ -242,6 +297,7 @@ const Dashboard = ({ currency, setCurrency }) => {
       const startIdx = (page - 1) * 10;
       const paginated = collectedHotels.slice(startIdx, startIdx + 10);
       setHotels(paginated);
+      setFullHotelList(collectedHotels);
     } catch (err) {
       console.error("Failed to fetch hotels:", err);
     }
@@ -249,13 +305,34 @@ const Dashboard = ({ currency, setCurrency }) => {
     setLoading(false);
   };
   
+  useEffect(() => {
+    if (!destId) return;
+  
+    fetchAllHotelsForMap()
+      .then(fullHotelList => setFullHotelList(fullHotelList))
+      .catch(console.error);
+  }, [destId, guests, dates]);
   
   
   
 
   return (
-      <div className="flex flex-col items-center justify-top min-h-screen bg-gray-100 p-6">
-        <div className="w-full max-w-5xl bg-white shadow-lg rounded-3xl px-6 py-4 flex flex-wrap items-center justify-between space-x-4 mb-8">
+    <div className="flex flex-col items-center justify-top min-h-screen bg-gray-100 p-6">
+      <div className="relative w-full max-w-5xl h-[400px] mb-4 rounded-3xl overflow-hidden">
+        <div className="absolute inset-0 z-0">
+        <HotelMap
+            hotels={fullHotelList}
+            currency={currency}
+            getNights={getNights}
+            convertPrice={convertPrice}
+            navigate={navigate}
+            guests={guests}
+            dates={dates}
+            withCards
+          />        </div>
+      </div>
+
+      <div className="w-full max-w-5xl bg-white shadow-lg rounded-3xl px-6 py-4 flex flex-wrap items-center justify-between space-x-4 -mt-16 z-10 relative">
           <div className="flex-1 min-w-[180px]">
             <label className="text-sm font-semibold text-gray-600">Location</label>
             <input
@@ -372,6 +449,7 @@ const Dashboard = ({ currency, setCurrency }) => {
             </button>
           </div>
         </div>
+
 
   
       <div className="flex w-full max-w-7xl mx-auto">

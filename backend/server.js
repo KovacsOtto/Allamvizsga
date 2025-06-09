@@ -647,6 +647,9 @@ app.get("/api/booking-attractions/:bookingId", (req, res) => {
     res.json(results);
   });
 });
+
+
+
 app.get("/api/recommendations/:userId", async (req, res) => {
   const { userId } = req.params;
 
@@ -663,31 +666,50 @@ app.get("/api/recommendations/:userId", async (req, res) => {
 
     const lastAddress = results[0].hotel_address;
     const parts = lastAddress.split(",");
-    const country = parts.length > 1 ? parts[parts.length - 1].trim() : null;
+    const country = parts.length >= 1 ? parts[parts.length - 1].trim() : null;
     if (!country) return res.json([]);
 
     try {
-      const searchRes = await axios.get("http://localhost:5000/api/search", { params: { query: country } });
-      const dest = Array.isArray(searchRes.data)
-        ? searchRes.data.find(d => d.name.toLowerCase().includes(country.toLowerCase())) || searchRes.data[0]
-        : null;
-      if (!dest?.id) return res.json([]);
+      const searchRes = await axios.get("https://booking-com15.p.rapidapi.com/api/v1/hotels/searchDestination", {
+        params: { query: country },
+        headers: {
+          "x-rapidapi-key": process.env.RAPIDAPI_KEY,
+          "x-rapidapi-host": "booking-com15.p.rapidapi.com",
+        },
+      });
 
-      const hotelRes = await axios.get("http://localhost:5000/api/hotels", {
+      const candidates = Array.isArray(searchRes.data?.data) ? searchRes.data.data : [];
+
+      const dest = candidates.find(d => 
+        d.country?.toLowerCase() === country.toLowerCase() && d.search_type === "city"
+      ) || candidates.find(d => 
+        d.country?.toLowerCase() === country.toLowerCase()
+      );
+
+      if (!dest?.dest_id) return res.json([]);
+
+      const hotelRes = await axios.get("https://booking-com15.p.rapidapi.com/api/v1/hotels/searchHotels", {
         params: {
-          dest_id: dest.id,
-          check_in: new Date().toISOString().slice(0, 10),
-          check_out: new Date(Date.now() + 86400000).toISOString().slice(0, 10),
+          dest_id: dest.dest_id,
+          search_type: "CITY",
+          arrival_date: new Date().toISOString().slice(0, 10),
+          departure_date: new Date(Date.now() + 86400000).toISOString().slice(0, 10),
           adults: 2,
           room_qty: 1,
           page_number: 1
+        },
+        headers: {
+          "x-rapidapi-key": process.env.RAPIDAPI_KEY,
+          "x-rapidapi-host": "booking-com15.p.rapidapi.com",
         }
       });
 
       const hotels = hotelRes.data?.data?.hotels || [];
-      res.json(hotels.slice(0, 6)); 
+      res.json(hotels.slice(0, 6));
+
+
     } catch (e) {
-      console.error("Recommendation error:", e);
+      console.error("Recommendation error:", e?.response?.data || e.message);
       res.status(500).json({ error: "Recommendation failed" });
     }
   });
