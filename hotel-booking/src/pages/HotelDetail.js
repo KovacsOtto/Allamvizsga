@@ -52,7 +52,7 @@ const HotelDetail = () => {
   useEffect(() => {
     const fetchReviews = async () => {
       try {
-        const res = await axios.get(`http://localhost:5000/api/hotels/reviews/${id}?page=${reviewPage}`);
+        const res = await axios.get(`https://backend-519v.onrender.com/api/hotels/reviews/${id}?page=${reviewPage}`);
         if (res.data.success && Array.isArray(res.data.reviews)) {
           setReviews(res.data.reviews);
           setReviewTotal(res.data.totalCount || 0);
