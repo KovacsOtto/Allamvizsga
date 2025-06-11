@@ -43,6 +43,7 @@ const HotelDetail = () => {
   const recommendedPrice = location.state?.recommendedPrice || null;
   
   const searchParams = new URLSearchParams(location.search);
+  
   const check_in = searchParams.get("check_in");
   const check_out = searchParams.get("check_out");
   const adults = searchParams.get("adults");
@@ -79,7 +80,7 @@ const HotelDetail = () => {
     const fetchHotelDetails = async () => {
       try {
         const res = await axios.get(`https://backend-519v.onrender.com/api/hotels/details/${id}`, {
-          params: { check_in, check_out, adults, children, room_qty },
+          params: { check_in, check_out, adults, children, room_qty , currency},
         });
 
         if (res.data.status && res.data.data) {

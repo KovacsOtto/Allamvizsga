@@ -481,6 +481,7 @@ const Dashboard = ({ currency, setCurrency }) => {
                   adults: guests.adults,
                   children: guests.children,
                   room_qty: guests.rooms,
+                  currency
                 }).toString();
                 navigate(`/hotel/${hotel.property.id}?${params}`);
               }}

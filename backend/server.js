@@ -514,7 +514,7 @@ app.get("/api/hotels/details/:id", async (req, res) => {
         units: "metric",
         temperature_unit: "c",
         languagecode: "en-us",
-        currency_code: "EUR",
+        currency_code: req.query.currency || "EUR",
       },
       headers: {
         "x-rapidapi-key": process.env.RAPIDAPI_KEY,
